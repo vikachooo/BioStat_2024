@@ -1,0 +1,689 @@
+---
+title: "BI_retraining_basic_datavis_2024"
+author: "B.V. Sotnikov"
+date: "2024-09-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, error = FALSE, fig.width=16, fig.height=10)
+
+library(tidyverse)
+```
+
+## Data reading
+
+```{r dataLoading}
+hogwarts <- read_csv("data/hogwarts_2024.csv")
+hogwarts %>% head()
+```
+
+### Checking dataset structure
+
+```{r}
+hogwarts %>% glimpse()
+
+# Changing some variables type to factors
+hogwarts <- hogwarts %>% mutate(
+  across(c(house, course, sex, wandCore, bloodStatus), ~ as.factor(.x))
+)
+```
+
+### NA checking
+
+```{r}
+sum(is.na(hogwarts))
+```
+
+### Summary output
+
+```{r}
+hogwarts %>% summary()
+```
+
+## Data visualisation
+
+### 1 фактор
+
+![Торт Наполеон](images/napoleon.jpg)
+
+```{r}
+ggplot()
+  geom_
+  theme_
+  coord_
+  scale_
+  facet_
+
+
+```
+
+### Цвета
+
+![](images/colorbynames.png)
+
+Пкорасим столбцы в отличный от серого цвет.
+
+```{r}
+ggplot(hogwarts)+
+  geom_bar(aes(x = house))+ 
+  theme_bw()
+```
+
+![](images/hexcolorggplot.png){width="500"}
+
+Раскрасим факультеты в разные цвета
+
+```{r}
+ggplot(hogwarts)+
+  geom_bar(aes(x = house), 
+           colour = "black")+ 
+  theme_bw()
+```
+
+Добавим цвет границы (черный).
+
+```{r}
+ggplot(hogwarts)+
+  geom_bar(aes(x = house), 
+           colour = "black")+ 
+  theme_bw()
+```
+Цвет столбцов в зависимости от факультета.
+
+```{r}
+ggplot(hogwarts)+
+  geom_bar(aes(x = house, 
+               fill = house), 
+           colour = "black")+ 
+  theme_bw()
+  
+c("Gryffindor" = "#C50000", "Hufflepuff" = "#ECB939", "Ravenclaw" = "#41A6D9", "Slytherin" = "#1F5D25")
+```
+
+Выделим один факультет цветом.
+
+```{r}
+ggplot(hogwarts)+
+  geom_bar(aes(x = house, 
+               fill = (house == "Gryffindor"), 
+           colour = "black"))+ 
+  theme_bw()
+```
+
+Выделим один факультет красным цветом, а другие черным.
+
+```{r}
+
+ggplot(hogwarts) +
+  geom_bar(aes(x = house, 
+               fill = house == "Gryffindor"), 
+           colour = "black") + 
+  scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "black")) +
+  theme_bw()
+
+```
+
+Вручную добавить цвета каждому столбцу.
+
+```{r scale_fill_manual}
+ggplot(hogwarts)+
+  geom_bar(aes(x = house, 
+               fill = house), 
+           colour = "black")+ 
+  scale_fill_manual(values = c("Gryffindor" = "#C50000", "Hufflepuff" = "#ECB939", "Ravenclaw" = "#41A6D9", "Slytherin" = "#1F5D25"))+
+  theme_bw()
+  
+
+```
+
+
+
+Резюме
+
+1.  ggplot составляют 5 основных компонентов: геомы, оси, фасеты, координатная плоскость и тема
+2.  Внутри геомов есть эстетики. Внутрь эстетик мы помещаем те переменные из данных, которые желаем видеть на графике. Это будут наши оси.
+3.  Ось -- не только координата x и y -- любая эстетика, например, заливка, тоже может быть осью.
+4.  Цвет в ggplot можно задать как словесно, так и при помощи гекскода.
+5.  У цвета есть три основных применения -- различение групп, акцентирование подмножества объектов, отражение свойства, связанного с цветом.
+6.  Можно подробно настроить оси при помощи опции scale (основные типы функций, которые пригождаются -- discrete, continuous и manual).
+7.  Распределение 1-й категориальной/факторной/качественной/номинативной переменной можно представить в виде столбиковой диаграммы (барплота).
+
+### 2 катеорийных фактора
+
+Добавим второй фактор
+
+```{r}
+ggplot(hogwarts)+
+  geom_bar(aes(x = house,
+           fill = sex),
+           colour = "black") + 
+  theme_bw()
+```
+
+Место для ~~вашей рекламы~~ вашего графика
+
+```{r}
+
+```
+
+### dodge position
+
+dodge -- это расположение столбиков друг за другом без пробела
+dodge2 -- это расположение столбиков друг за другом с пробелом
+fill - это наложение столбиков друг на друга (default)
+
+```{r}
+ggplot(hogwarts)+
+  geom_bar(aes(x = fct_infreq(house), 
+               fill = sex), 
+           colour = "black", 
+           position = "dodge")+ 
+  scale_x_discrete(name = "house")+
+  theme_bw()
+
+
+```
+
+## forcats package - for working with factors
+
+Ordering factors by frequency
+
+```{r}
+ggplot(hogwarts)+
+  geom_bar(aes(x = fct_infreq(house),
+               fill = sex)) +
+  scale_x_discrete(name = "house") #change x-axis name
+```
+### Changing label size inside theme
+
+```{r}
+ggplot(hogwarts)+
+  geom_bar(aes(x = fct_infreq(house),
+               fill = sex)) +
+  scale_x_discrete(name = "house") + #change x-axis name
+  theme(
+    axis.text.x = element_text(size = 20), #change x-axis label size
+    axis.title = element_text(size = 25), #change axis title size
+    legend.text = element_text(size = 20), #change legend text size
+    legend.title = element_text(size = 25) #change legend title size  
+    ) 
+```
+## Saving theme and other ggplot layers in a variable
+
+```{r}
+our_theme <-  theme(
+    axis.text.x = element_text(size = 20), #change x-axis label size
+    axis.title = element_text(size = 25), #change axis title size
+    legend.text = element_text(size = 20), #change legend text size
+    legend.title = element_text(size = 25) #change legend title size  
+    ) 
+
+scale_house <- scale_x_discrete(name = "house")
+
+plot1 <- ggplot(hogwarts)+
+  geom_bar(aes(x = fct_infreq(house),
+               fill = sex)) +
+  our_theme +
+  scale_house
+
+plot1
+```
+
+Резюме.
+
+1\. У geom_bar есть аргумент position, который позволяет манипулировать взаиморасположением второй факторной переменной. Опция `dodge`/`dodge2` ставит столбики подгрупп внутри группы рядом, а опция `fill` укладывает их друг на друга в отшкалированном виде.
+
+2\. Функции из семейства forcats (например, `fct_infreq()`) позволяют менять порядок факторных переменных.
+
+3\. Функция `theme()` позволяет тонко регулировать различные оформительские аспекты графика. Например, размер и угол наклона шрифта. 
+
+4\. Элементы ggplot можно сохранять в переменные и переиспользовать.
+
+### 1 качественная переменная с большим числом градаций - lollypop plot
+
+```{r}
+hogwarts %>% 
+  filter(id  %in% 1:40)  %>% 
+  mutate(id = as.factor(id))  %>% 
+  ggplot()+
+  geom_segment(aes(x = id,
+                   xend = id,
+                   y = 0,
+                   yend = week_1)) +
+  geom_point(aes(x = id, y = week_1), size = 3, color = "red")+
+  theme_bw()+
+  theme_custom
+
+
+# reorder by student id with fct_reorder
+
+
+hogwarts %>% 
+  filter(id  %in% 1:40)  %>% 
+  mutate(id = as.factor(id))  %>% 
+  ggplot()+
+  geom_segment(aes(x = fct_reorder(id, week_1, .desc = T),#reorder id by week_1
+                   xend = fct_reorder(id, week_1),
+                   y = 0,
+                   yend = week_1)) +
+  geom_point(aes(x = id, y = week_1), size = 3, color = "red")+
+  geom_hline(yintercept = mean(hogwarts$week_1), linetype = "dotted", size =1.5, color = "blue")+
+  theme_bw()+
+  theme_custom
+
+```
+
+geom_segment -- это отрезок, который мы рисуем на графике. Он состоит из двух точек: начала и конца. В нашем случае начало -- это 0, а конец -- это значение переменной week_1. 
+
+
+Место для вашего графика
+
+```{r}
+
+hogwarts %>% 
+  filter(sex == "male" & course == 7)  %>% 
+  mutate(id = as.factor(id))  %>% 
+  ggplot() +
+  geom_segment(aes(y = fct_reorder(id, week_1, .desc = TRUE), # changed it to vertical
+                   yend = fct_reorder(id, week_1),
+                   x = 0,
+                   xend = week_1)) +
+  geom_point(aes(y = id, x = week_1, color = house), size = 5) +
+  scale_y_discrete(name = "student id") +
+  scale_x_continuous(name = "week 1") +
+  theme_bw() +
+  theme_custom
+```
+
+# Временные тренды
+
+Отследим, как студенты приносили или отнимали баллы у факультета
+
+```{r}
+# Создадим новый субдатасет
+students10ForWeeks <- hogwarts |> 
+  select(id, starts_with("week")) |> 
+  pivot_longer(!id, names_to = "week", values_to = "points") |> #каждый ряд - это оценка для каждого студента за каждую неделю
+  filter(id  %in%  1:10) |> 
+  mutate(
+    week = week |> str_split_i("_", 2) |> as.numeric() #уберем "week_" и преобразуем в числовой формат
+    )
+
+# Отрисуем график
+ggplot(students10ForWeeks)+
+  geom_line(aes(x = week, 
+                y = points, 
+                group = id))+
+  theme_bw()+
+  theme_custom
+```
+
+"Подсветим" конкретного студента
+
+```{r}
+ggplot()+
+  geom_line(data = students10ForWeeks, 
+            aes(x = week, 
+                y = points, 
+                group = id,
+                color = "grey"))+
+  geom_line(data = (students10ForWeeks %>% filter(id == 10)), 
+            aes(x = week, 
+                y = points, 
+                group = id,
+                size = 1.5
+                ))+
+  theme_bw()+
+  theme_custom
+```
+
+Резюме.
+
+1\. Для категориальных переменных с большим числом категорий можно заменить барплот лоллипопом.
+
+2\. На графики можно добавлять графические примитивы -- линии и фигуры, которые создают смысловой акцент, показывают отсечку и т.д.
+
+3\. Изменения во времени хорошо передают лайнплоты.
+
+4\. Если на лайнплоте слишком много линий, есть два хороших решения: убрать график или сделать акцентными нужные единицы наблюдения, убрав в тень остальные.
+
+# 1 количественная переменная
+
+Визуализируем количественную переменную.
+
+```{r}
+ggplot(hogwarts)+
+  geom_bar(aes(x = result))+
+  theme_bw()+
+  our_theme
+```
+
+Иной подход к визуализации количественной переменной
+
+```{r}
+ggplot(hogwarts)+
+  geom_histogram(aes(x = result),
+                 fill = "blue",
+                 color = "white",
+                 bins = 50)+ #default is 30 bins
+  theme_bw()+
+  theme_custom
+```
+
+И еще один.
+
+```{r}
+ggplot(hogwarts)+
+  geom_density(aes(x = result),
+                 fill = "blue",
+                 color = "white",
+                 bins = 50)+ #default is 30 bins
+  theme_bw()+
+  theme_custom
+```
+
+Малое количество наблюдений - density plot не работает
+
+```{r}
+hogwarts |> 
+  filter(course == 7, house == "Ravenclaw") |> 
+  ggplot()+
+  geom_density(aes(x = `Potions exam`), 
+               fill = "turquoise1", 
+               colour = "grey49", 
+               bins = ceiling(log2(nrow(hogwarts))+1))+
+  theme_bw()+
+  our_theme
+```
+
+### Сравнение нескольких количественных переменных
+
+цвета перемешиваются, уже нехорошо
+лучше тогда boxplot
+
+```{r}
+ggplot(hogwarts)+
+  geom_density(aes(x = `Potions exam`), 
+               fill = "turquoise1", 
+               colour = "grey49",
+               alpha = 0.5) +
+  geom_density(aes(x = `Transfiguration exam`), 
+                 fill = "green", 
+                 colour = "grey49",
+                 alpha = 0.5)+
+  geom_density(aes(x = `Charms exam`), 
+                 fill = "orange", 
+                 colour = "grey49",
+                 alpha = 0.5)+
+  theme_bw()+
+  our_theme
+```
+
+Резюме.
+
+1\. Распределение одной количественной (желательно непрерывной) переменной можно задать гистограммой или графиком плотности вероятности.
+
+2\. Для хорошей визуализации гистограммы нужно моделировать число (или ширину) столбика.
+
+3.  График плотности вероятности плохо работает на малых данных.
+
+4\. При наложении нескольких гистограмм/графиков плотности вероятности, стоит сделать слои более прозрачными, используя аргумент `alpha`.
+
+### 1 количественная переменная и фактор
+
+![](images/box.png)
+
+Сравним несколько распределений
+
+```{r}
+ggplot(hogwarts)+
+  geom_boxplot(aes(y =`Potions exam`, x = house, fill = house))+
+  theme_bw()+
+  our_theme
+```
+
+Сравниваем несколько переменных
+
+```{r}
+hogwarts |> 
+  select(id, `Transfiguration exam`, `Potions exam`, `Charms exam`) |> 
+  pivot_longer(!id, names_to = "exam", values_to = "score") |> 
+  ggplot()+
+  geom_boxplot(aes(x = exam, y = score))+
+  theme_bw()+
+  our_theme
+```
+
+В чем плюсы и минусы двух этих представлений количественных переменных?
+
+```{r}
+
+```
+
+### geom_violin
+
+А есть ли что-то, сочетающее их свойства?
+geom_violin, но так же как и geom_density, он не работает с малым количеством наблюдений
+
+```{r}
+hogwarts |> 
+  select(id, `Transfiguration exam`, `Potions exam`, `Defence against the dark arts exam`) |> 
+  pivot_longer(!id, names_to = "exam", values_to = "score") |> 
+  ggplot()+
+  geom_violin(aes(x = exam, y = score))+
+  theme_bw()+
+  theme_custom
+```
+```{r}
+hogwarts |> 
+  select(id, `Transfiguration exam`, `Potions exam`, `Defence against the dark arts exam`) |> 
+  pivot_longer(!id, names_to = "exam", values_to = "score") |> 
+  ggplot()+
+  geom_jitter(aes(x = exam, y = score))+
+  theme_bw()+
+  theme_custom
+```
+
+### boxplot + jitter
+
+Комбинируем разные слои
+
+```{r}
+hogwarts |> 
+  filter(house == "Slytherin") |> 
+  select(id, `Transfiguration exam`, `Potions exam`, `Defence against the dark arts exam`) |> 
+  pivot_longer(!id, 
+               names_to = "exam", 
+               values_to = "score") |> 
+  ggplot(aes(x = exam, 
+             y = score))+ #так как у нас несколько слоев, можно задать эстетику внутри ggplot
+  geom_boxplot() +
+  geom_jitter()+
+  theme_bw()+
+  theme_custom
+```
+
+```{r}
+hogwarts |> 
+  filter(house == "Slytherin") |> 
+  select(id, sex, `Transfiguration exam`, `Potions exam`, `Defence against the dark arts exam`) |> 
+  pivot_longer(-c(id,sex), 
+               names_to = "exam", 
+               values_to = "score") |> 
+  ggplot(aes(x = exam, 
+             y = score,
+             fill = sex))+ #так как у нас несколько слоев, можно задать эстетику внутри ggplot
+  geom_boxplot(notch = TRUE, outliers = FALSE) +
+  geom_jitter()+
+  theme_bw()+
+  theme_custom
+```
+
+
+### 1 количественная и 2 факторные переменные
+
+```{r}
+hogwarts |> 
+  filter(house == "Slytherin") |> 
+  select(id, `Transfiguration exam`, `Potions exam`, `Defence against the dark arts exam`, sex, wandCore) |> 
+  pivot_longer(-c(id, sex, wandCore), 
+               names_to = "exam", 
+               values_to = "score") |> 
+  ggplot(aes(x = exam, y = score, fill = sex, alpha = wandCore))+
+  geom_boxplot()+
+  geom_jitter()+
+  theme_bw()+
+  theme_custom
+  
+```
+
+![](images/aes_2types.png)
+
+```{r}
+hogwarts |> 
+  filter(house == "Slytherin") |> 
+  select(id, `Transfiguration exam`, `Potions exam`, `Defence against the dark arts exam`, sex, wandCore) |> 
+  pivot_longer(-c(id, sex, wandCore), names_to = "exam", values_to = "score") |> 
+  ggplot(aes(x = exam, y = score, fill = sex, alpha = wandCore))+
+  geom_boxplot(notch = TRUE, outliers = FALSE)+ #notch выделяет медиану
+  geom_jitter()+
+  theme_bw()+
+  theme_custom +
+  annotate("text", x = 0.6, y = 100, label = "Our label", size = 8, color = "red")
+```
+
+Резюме.
+
+1. Распределение количественной переменной можно представить в виде боксплота. На боксплоте мы видим несколько простых статистик (квартили, межквартильный размах) и выбросы, но не видим деталей распределения. 
+
+2. Преодоелние предыдущей проблемы боксплота -- jitter и violin. Первый хорош для наборов данных с малым числом наблюдений, второй -- с большим. 
+
+3. На одном графике можно сочетать не только геомы одного типа, но и разные. Например, сделать боксплот с джиттером. 
+
+4. Справка по конкретным функциям позволяет узнать о разных опциях и настройках: например, на боксплоте мы можем убрать выбросы или добавить вырезку. 
+
+5. Боксплоты, как и барплоты, можно разбивать по категориям.
+
+### Еще один способ сравнить распределения по группам
+
+```{r}
+ggplot(hogwarts)+
+  geom_histogram(aes(x = `Potions exam`), 
+                 fill = "turquoise1", 
+                 colour = "grey49", 
+                 bins = 20)+
+  theme_bw()+
+  theme_custom
+```
+
+```{r}
+ggplot(hogwarts)+
+  geom_boxplot(aes(y = `Potions exam`), 
+                 fill = "turquoise1", 
+                 colour = "grey49", 
+                 bins = 20)+
+  theme_bw()+
+  theme_custom
+```
+
+И немного другой подход
+
+```{r}
+ggplot(hogwarts)+
+  geom_histogram(aes(x = `Potions exam`), 
+                 fill = "turquoise1", 
+                 colour = "grey49", 
+                 bins = 20)+
+  facet_wrap(vars(course))+
+  theme_bw()+
+  theme_custom+
+  theme(strip.text = element_text(size = 15))
+```
+
+### Распределение 2-х количественных переменных
+
+```{r}
+hogwarts |> 
+  ggplot()+
+  geom_histogram(aes(x = `Charms exam`),
+                 colour = "black", 
+                 fill = "lightgreen")+
+  geom_histogram(aes(y = `Transfiguration exam`),
+                 colour = "black", 
+                 fill = "lightgreen")+
+  theme_bw()+
+  theme_custom
+```
+
+```{r}
+hogwarts |> 
+  ggplot()+
+  theme_bw()+
+  theme_custom
+```
+
+![](images/ggplot2shapey.png)
+
+Побудем пигмалионами -- поработаем с формой
+
+```{r}
+hogwarts |> 
+  ggplot()+
+  geom_point(aes(x = `Charms exam`, y = `Transfiguration exam`))+
+  theme_bw()+
+  theme_custom
+```
+
+```{r}
+hogwarts |> 
+  mutate(course = as.factor(course)) |> 
+  ggplot()+
+  geom_point(aes(x = `Charms exam`, 
+                 y = `Transfiguration exam`), 
+             size = 3)+
+  theme_bw()+
+  theme_custom
+
+values = c("1" = 49, "2" = 50, "3" = 51, "4" = 52, "5" = 53, "6" = 54, "7" = 55)
+```
+
+```{r}
+hogwarts |> 
+  mutate(course = as.factor(course)) |> 
+  ggplot()+
+  geom_point(aes(x = `Charms exam`, 
+                 y = `Transfiguration exam`, 
+                 shape = course, 
+                 colour = course), 
+             size = 3)+
+  scale_shape_manual(values = c("1" = 49, "2" = 50, "3" = 51, "4" = 52, "5" = 53, "6" = 54, "7" = 55))+
+  theme_bw()+
+  theme_custom+
+```
+
+Резюме. 
+
+1. Стандартный инструмент для визуализации двух количественных переменных -- диаграмма рассеяния. 
+
+2. Если необходимо добавить на график еще 1 факторный признак -- выделяем его цветом. 
+
+3. Размер не лучшая опция для использования "в соло", но может добавить выразительности в сочетании с цветом. 
+
+4. При большой кучности точек в определенных позициях полезно использовать `jitter` для случайного перемешивания. 
+
+5. Аннотации помогают подсветить важную деталь в данных. Или намекнуть, что лекция подошла к концу.
+
+![](images/Nicholas_I.jpg)
+
+Ссылочная
+
+-   [Сайт с примерами графиков и полезными советами](https://r-graph-gallery.com/)
+-   [Оригинальная статья с изложением философии ggplot](https://byrneslab.net/classes/biol607/readings/wickham_layered-grammar.pdf)
+-   [Документация ggplot](https://ggplot2.tidyverse.org/)
+-   [Учебник по data-science от авторов ggplot](https://r4ds.hadley.nz/)
+-   [Книга о некоторых принципах визуализации с полезными советами, но без явного отображения кода](https://clauswilke.com/dataviz/)
+-   [Учебник по ggplot от авторов ggplot (в процессе написания)](https://ggplot2-book.org/)
+-   [Телеграм-канал про визуализацию (не в биомедицине, и не на R, но от этого не менее хороший)](https://t.me/nastengraph)
+-   [Шпаргалка по ggplot2](https://rstudio.github.io/cheatsheets/html/data-visualization.html)
+-   [Шпаргалка по rmd](https://posit.co/wp-content/uploads/2022/10/rmarkdown-1.pdf)
