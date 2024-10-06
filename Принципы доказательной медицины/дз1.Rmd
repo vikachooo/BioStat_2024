@@ -1,0 +1,89 @@
+---
+title: "Домашнее задание 1"
+author: "Виктория Зайцева"
+date: "17/09/2024"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
+library(tidyverse)
+carrental <- read.csv("C:/Users/VictoriaZaitceva/Desktop/personal/BioStat_2024/Принципы доказательной медицины/carrental.csv")
+```
+
+
+## Распространенность “experience”
+
+
+```{r}
+carrental$experience <- as.factor(carrental$experience)
+carrental$accident <- as.factor(carrental$accident)
+```
+
+
+
+```{r}
+(sum(carrental$experience == 1) / nrow(carrental)) * 100
+```
+
+Распространенность водителей с опытом вождения в данной популяции составляет 32%.
+
+## Риск “accident” в общей группе, в группе “experience” и в группе без “experience”
+
+
+```{r}
+# Риск “accident” в общей группе
+(sum(carrental$accident == 1) / nrow(carrental)) * 100
+# Риск “accident” в группе “experience”
+(sum(carrental$accident == 1 & carrental$experience == 1) / sum(carrental$experience == 1)) * 100
+# Риск “accident” в группе без “experience”
+(sum(carrental$accident == 1 & carrental$experience == 0) / sum(carrental$experience == 0)) * 100
+```
+В нашем случае вся популяция изначально подвержена риску аварии, поэтому расчет риска не будет принципиально отличаться от расчета распространенности.
+
+В общей группе риск аварии составляет 22%, в группе с опытом вождения - 9.38%, в группе без опыта вождения - 27.94%.
+
+
+## Плотность событий (incidence rate) в общей группе, в группе “experience” и в группе без “experience”
+
+```{r}
+carrental <- carrental %>% mutate(rent_time = stop - start)
+# Плотность событий (incidence rate) в общей группе
+sum(carrental$accident == 1)
+sum(carrental$rent_time)
+sum(carrental$accident == 1) / sum(carrental$rent_time)
+(sum(carrental$accident == 1) / sum(carrental$rent_time))*365
+```
+В общей группе плотность событий (аварии) составляет 0.003 (т.е. 0.003 на 1 день аренды), или 22 случая на 7222 дней аренды, или 1.11 случай на 1 год аренды. 
+
+```{r}
+# Плотность событий (incidence rate) в группе “experience”
+sum(carrental$accident == 1 & carrental$experience == 1)
+sum(carrental$rent_time[carrental$experience == 1])
+sum(carrental$accident == 1 & carrental$experience == 1) / sum(carrental$rent_time[carrental$experience == 1])
+(sum(carrental$accident == 1 & carrental$experience == 1) / sum(carrental$rent_time[carrental$experience == 1])) * 365
+```
+В группе с опытом вождения плотность событий составляет 0.00318 случая на 1 день аренды, или 3 случая аварии на 944 дней аренды, или 1.16 случаев на 1 год аренды.
+
+```{r}
+# Плотность событий (incidence rate) в группе без “experience”
+sum(carrental$accident == 1 & carrental$experience == 0)
+sum(carrental$rent_time[carrental$experience == 0])
+sum(carrental$accident == 1 & carrental$experience == 0) / sum(carrental$rent_time[carrental$experience == 0])
+(sum(carrental$accident == 1 & carrental$experience == 0) / sum(carrental$rent_time[carrental$experience == 0])) * 365
+```
+В группе без опыта вождения плотность событий составляет 0.00303 случая на 1 день аренды, или 19 случаeв аварии на 6278 дней аренды, или 1.1 случай на 1 год аренды.
+
+
+## Вывод
+
+Таким образом, данные показывают, что водители с опытом вождения менее подвержены риску аварии, чем водители без опыта вождения. При этом плотность событий в группах примерно одинаковая. 
+
+
+
+
+
+
+
+
+
