@@ -1,0 +1,143 @@
+---
+title: "hw2"
+author: "Victoria Zaitceva"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+4* На лекции мы работали со скриптом, в котором мы производили оценку
+математического ожидания случайной величины (прироста гемоглобина).
+Теперь мы хотим провести виртуальный эксперимент, в котором мы будем
+оценивать вероятность некого события (например полного исцеления после
+приема терапии). По-прежнему, дизайн одногрупповой. Переделайте скрипт
+так, чтобы в нем можно было бы анализировать ошибку в оценке
+вероятности события в зависимости от истинной вероятности и объема
+выборки. Какие закономерности вы можете вычислить, экспериментируя со
+скриптом?
+
+
+Вместо непрерывной случайной величины теперь у нас есть дискретная случайная величина, принимающая значения 0 или 1:
+
+1 — событие произошло (полное исцеление).
+0 — событие не произошло.
+
+```{r}
+true_p <- 0.7  # Истинная вероятность события (полного исцеления)
+```
+
+## Однократная оценка вероятности по выборке
+
+```{r}
+n_patients <- 5  # Количество пациентов в выборке
+
+# Генерация выборки событий
+sample_events <- rbinom(n = n_patients, size = 1, prob = true_p)
+
+# Оценка вероятности события по выборке
+sample_estimate <- mean(sample_events)
+
+print(paste("Оценка вероятности по выборке:", sample_estimate))
+
+```
+
+## Набираем статистику - многократная оценка среднего 
+
+
+```{r}
+n_patients <- 5    # Количество пациентов в каждой выборке
+n_repeats <- 1000  # Количество повторов эксперимента
+
+# Генерация данных для всех повторов
+df_all_repeats <- data.frame(
+  n_exp = rep(1:n_repeats, each = n_patients),
+  ID = rep(1:n_patients, times = n_repeats),
+  Event = rbinom(n = n_repeats * n_patients, size = 1, prob = true_p)
+)
+
+# Оценка вероятности события в каждом эксперименте
+df_sample_estimates <- df_all_repeats %>%
+  group_by(n_exp) %>%
+  summarise(estimated_p = mean(Event)) %>%
+  ungroup()
+
+```
+
+
+### Визуализация оценок вероятности
+
+```{r}
+ggplot(df_sample_estimates, aes(x = estimated_p)) +
+  geom_histogram(color = 'black', fill = 'white', binwidth = 0.05) +
+  geom_vline(xintercept = true_p, color = 'red', linetype = "dashed") +
+  theme_bw() +
+  labs(title = "Распределение оценок вероятности",
+       x = "Оценка вероятности",
+       y = "Частота")
+
+```
+
+
+
+```{r}
+error <- sqrt(mean((df_sample_estimates$estimated_p - true_p)^2))
+print(paste("Ошибка среднего:", round(error, 4)))
+
+```
+
+
+## Зависимость ошибки оценки вероятности от объема выборки и истинной вероятности
+
+```{r}
+simulate_error <- function(true_p, n_patients, n_repeats = 1000) {
+  df_all_repeats <- data.frame(
+    n_exp = rep(1:n_repeats, each = n_patients),
+    ID = rep(1:n_patients, times = n_repeats),
+    Event = rbinom(n = n_repeats * n_patients, size = 1, prob = true_p)
+  )
+  
+  df_sample_estimates <- df_all_repeats %>%
+    group_by(n_exp) %>%
+    summarise(estimated_p = mean(Event)) %>%
+    ungroup()
+  
+  error <- sqrt(mean((df_sample_estimates$estimated_p - true_p)^2))
+  return(error)
+}
+
+
+# Диапазоны значений для истинной вероятности и объема выборки
+true_p_values <- seq(0.1, 0.9, by = 0.1)
+n_patients_values <- c(5, 10, 20, 50, 100, 150)
+
+
+results <- expand.grid(true_p = true_p_values, n_patients = n_patients_values)
+results$error <- mapply(simulate_error, results$true_p, results$n_patients)
+
+
+ggplot(results, aes(x = n_patients, y = error, color = as.factor(true_p))) +
+  geom_line() +
+  geom_point() +
+  theme_bw() +
+  labs(title = "Зависимость ошибки оценки вероятности от объема выборки",
+       x = "Объем выборки (n_patients)",
+       y = "RMSE ошибки оценки",
+       color = "Истинная вероятность (true_p)")
+
+```
+
+Выводы:
+
+1. *Влияние размера выборки на ошибку оценки вероятности:* чем больше объем выборки, тем меньше ошибка оценки вероятности. При большем количестве наблюдений выборочная оценка стремится к истинной вероятности
+
+2. *Влияние истинной вероятности на ошибку оценки вероятности:* ошибка оценки максимальна при истинной вероятности около 0.5. 
+(50/50, совсем неопределенно). При значениях истинной вероятности, близких к 0 или 1, ошибка оценки уменьшается.
+
+
+
+
+
