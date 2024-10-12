@@ -1,0 +1,142 @@
+---
+title: "Confidence intervals"
+author: "Evgeny Bakin"
+date: '2024-10-12'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+## Эксперимент №2 из предыдущей лекции: Можно ли доверять доверительному интервалу?
+
+```{r exp_2, echo=FALSE, fig.height=15}
+
+num_centers <- 100 # Сколько центров поучаствует в эксперименте?
+
+sample_size <- 3 # Количество пациентов, прошедших, терапию
+Hg_improve <- 20 # Истинное среднее изменение уровня Hg (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rnorm(sample_size*num_centers, mean = Hg_improve, sd = Hg_sd)
+)
+
+hist(df_trial$Hg_change)
+
+```
+```{r}
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  do(broom::tidy(t.test(Hg_change ~ 1, conf.level = 0.95, data = .))) %>% 
+  dplyr::select(estimate, conf.low, conf.high) %>% 
+  mutate(CI_width = conf.high - conf.low) %>% 
+  mutate(out = ifelse((Hg_improve < conf.high) & (Hg_improve > conf.low), 'ok', 'missed'))
+
+table(trial_results$out)
+```
+
+
+
+## Визуализация
+
+```{r exp_2_viz, echo=FALSE, fig.height=15}
+
+ggplot(trial_results, aes(y = center_ID)) +
+  geom_errorbar(mapping = aes(xmin = conf.low, xmax = conf.high, color = out), size = 2) +
+  geom_vline(xintercept=Hg_improve, linetype="dashed", 
+                color = "black", size=2) +
+  theme_bw() +
+  theme(text = element_text(size = 30))  
+
+
+```
+
+## Эксперимент №3 из предыдущей лекции: Точно можно доверять?
+
+```{r exp_3, echo=FALSE}
+
+num_centers <- 1000 # Сколько центров поучаствует в эксперименте?
+
+sample_size <- 70 # Количество пациентов, прошедших, терапию
+avg_recovery_time <- 20 # Истинное среднее время до выздоровления (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  recovery_time = rexp(sample_size*num_centers, rate = 1/avg_recovery_time) # Экспоненциальное распределение вместо нормального для времени до выздоровления 
+)
+
+hist(df_trial$recovery_time)
+
+
+
+
+```
+```{r}
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  do(broom::tidy(t.test(recovery_time ~ 1, conf.level = 0.95, data = .))) %>% 
+  dplyr::select(estimate, conf.low, conf.high) %>% 
+  mutate(CI_width = conf.high - conf.low) %>% 
+  mutate(out = ifelse((avg_recovery_time < conf.high) & (avg_recovery_time > conf.low), 'ok', 'missed'))
+
+table(trial_results$out)
+
+# Как зависит вероятность промаха при изменении:
+# - объема выборки?
+# когда выборка мала, то вероятность промаха больше
+```
+
+
+
+# Эксперимент №4: одноцентровое, двухвыборочное исследование по времени выздоровления
+
+```{r exp_4}
+
+sample_size <- 30 # Количество пациентов, прошедших терапию в каждой из групп
+
+avg_recovery_time_R <- 20 # Истинное среднее время выздоровление для референса (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+avg_recovery_time_T <- 10 # Истинное среднее время выздоровление для теста (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+# истинная разница между группами = 20-10 = 10
+
+time_sd <- 3 # Разброс во времени выздоровление 
+
+df_trial <- data.frame(
+  arm = rep(c('R', 'T'), each = sample_size),
+  patient_ID = rep(1:sample_size, 2),
+  recovery_time = c(rnorm(sample_size, mean = avg_recovery_time_R, sd = time_sd),
+                    rnorm(sample_size, mean = avg_recovery_time_T, sd = time_sd))
+)
+
+trial_results <- df_trial %>% 
+  do(broom::tidy(t.test(recovery_time ~ arm, conf.level = 0.95, data = .))) %>% 
+  dplyr::select(estimate, conf.low, conf.high) %>% 
+  mutate(CI_width = conf.high - conf.low)
+
+
+trial_results
+# ДИ для чего разницу между группами. Полученный ДИ включает истинное значение разницы между группами
+
+
+```
+Односторонний доверительный интервал для разницы между группами:
+alternative = "greater"
+
+```{r}
+trial_results <- df_trial %>% 
+  do(broom::tidy(t.test(recovery_time ~ arm, conf.level = 0.95, alternative = "greater", data = .))) %>% 
+  dplyr::select(estimate, conf.low, conf.high) %>% 
+  mutate(CI_width = conf.high - conf.low)
+
+trial_results
+```
+

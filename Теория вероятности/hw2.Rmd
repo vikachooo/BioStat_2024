@@ -125,7 +125,7 @@ ggplot(results, aes(x = n_patients, y = error, color = as.factor(true_p))) +
   theme_bw() +
   labs(title = "Зависимость ошибки оценки вероятности от объема выборки",
        x = "Объем выборки (n_patients)",
-       y = "RMSE ошибки оценки",
+       y = "Ошибка оценки вероятности",
        color = "Истинная вероятность (true_p)")
 
 ```
