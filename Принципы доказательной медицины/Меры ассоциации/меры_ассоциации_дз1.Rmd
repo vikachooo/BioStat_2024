@@ -28,17 +28,20 @@ diabetes <- read.csv("diabetes.csv")
 
 ```{r}
 
-table_diabetes <- table(diabetes$Диабет, diabetes$ИМТ) %>%
+table_diabetes <- table(diabetes$ИМТ, diabetes$Диабет) %>%
   addmargins() %>%
   as.data.frame.matrix() %>%
-  rownames_to_column(var = "Диабет") %>%
+  rownames_to_column(var = "ИМТ") %>%
   as_tibble() 
-# add prefix to column names
-colnames(table_diabetes) <- c("Диабет", "Высокий ИМТ", "Нормальный ИМТ", "Всего")
 
+
+colnames(table_diabetes) <- c("ИМТ", "Диабет", "Нет диабета", "Всего")
+
+# для красоты
 table_diabetes_flex <- table_diabetes %>%
   flextable()
 table_diabetes_flex
+
 ```
 
 
@@ -51,9 +54,10 @@ RR <- round(as.numeric(Risk_diabetes / Risk_no_diabetes),1)
 print(paste("Risk Ratio = ", RR))
 RD <- round(as.numeric(Risk_diabetes - Risk_no_diabetes),1)
 print(paste("Risk Difference = ", RD))
+
 ```
 
-Относительный риск (relative risk) равен 1.8, абсолютная разница в рисках (risk difference) равна 0.3. Это означает, что у людей с высоким ИМТ риск заболеть диабетом 2-го типа в 1.8 раза выше, чем у людей с нормальным ИМТ. Абсолютная разница в рисках равна 0.3, что означает, что у людей с высоким ИМТ риск заболеть диабетом 2-го типа на 30% выше, чем у людей с нормальным ИМТ.
+Относительный риск (relative risk) равен 2.2, абсолютная разница в рисках (risk difference) равна 0.3. Это означает, что у людей с высоким ИМТ риск заболеть диабетом 2-го типа в 2.2 раза выше, чем у людей с нормальным ИМТ. Абсолютная разница в рисках равна 0.3, что означает, что у людей с высоким ИМТ риск заболеть диабетом 2-го типа на 30% выше, чем у людей с нормальным ИМТ.
 
 
 # Задание 2.
@@ -65,63 +69,57 @@ print(paste("Risk Difference = ", RD))
 
 ## Решение
 
-Здесь мы хотим сравнить две независимые группы (пациенты с пневмонией и контрольная группа) по тому, какие места они посещали. Для этого мы можем использовать критерий хи-квадрат для проверки независимости двух категориальных переменных.
+Данное исследование типа случай-контроль. Участники были отобраны по наличию или отсутствию пневмонии, и для каждого участника были ретроспективно собраны данные о том, какие места он посещал. Так как мы начинаем наше исследование с исхода, наша выборка оприори нерепрезентативна, и мы не можем на основании этого анализа узнать распространенность заболевания (как можно было бы, если бы мы отобрали всех здоровых изначально и смотрели, сколько заболеет в течение некоторого промежутка времени). 
+
+Лучшей мерой ассоциации для исследования типа случай-контроль является отношение шансов (odds ratio). Оно определяется как отношение шансов заболеть в группе пациентов (с пневмонией) к шансам заболеть в контрольной группе (здоровым).
+
+В дополнение к основно мере ассоциации, мы можем использовать критерий хи-квадрат для проверки независимости двух категориальных переменных (группа (случай/контроль) и факт посещения места (да/нет)).
 
 ```{r}
 pneumonia <- read.csv("pneumonia.csv")
+colnames(pneumonia) <- c("ID", "Группа", "Торговый_центр", "Ресторан", "Общественные_мероприятия") # чтобы пробелы не смущали
 ```
 
 
-```{r}
-colnames(pneumonia) <- c("ID", "Группа", "Торговый_центр", "Ресторан", "Общественные_мероприятия")
-  
-
-  
-pneumonia_table <- pneumonia %>%
-  group_by(Группа) %>%
-  summarise(
-    ТЦ_Да = sum(Торговый_центр  == "Да"),
-    ТЦ_Нет = sum(Торговый_центр == "Нет"),
-    Ресторан_Да = sum(Ресторан == "Да"),
-    Ресторан_Нет = sum(Ресторан == "Нет"),
-    Мероприятия_Да = sum(Общественные_мероприятия == "Да"),
-    Мероприятия_Нет = sum(Общественные_мероприятия == "Нет")
-  ) %>%
-  flextable()
-
-
-pneumonia_table
-```
 
 ```{r}
+
 places <- c("Торговый_центр", "Ресторан", "Общественные_мероприятия")
-chi_squared_results <- list()
+chi_squared_OR_results <- list()
 
 for (place in places) {
   # таблица сопряженности для каждого места
   contingency_table <- table(pneumonia[[place]], pneumonia$Группа)
+  contingency_table <- contingency_table[, c(2, 1)] # меняем местами столбцы
   
   # chi-squared test
   chi_test <- chisq.test(contingency_table)
   
+  # odds ratio
+  odds_ratio <- (contingency_table[1, 1]/contingency_table[1, 2]) / (contingency_table[2, 1]/contingency_table[2, 2])
+  
   # Store results
-  chi_squared_results[[place]] <- list(
+  chi_squared_OR_results[[place]] <- list(
     "Contingency Table" = contingency_table,
     "Chi-Squared Statistic" = chi_test$statistic,
-    "p-value" = chi_test$p.value
+    "p-value" = chi_test$p.value,
+    "OR" = odds_ratio
   )
 }
 
 
 for (place in places) {
   cat("\nАнализ для:", place, "\n")
-  print(chi_squared_results[[place]]$`Contingency Table`)
-  cat("Chi-Squared Statistic:", chi_squared_results[[place]]$`Chi-Squared Statistic`, "\n")
-  cat("p-value:", chi_squared_results[[place]]$`p-value`, "\n")
+  print(chi_squared_OR_results[[place]]$`Contingency Table`)
+  cat("Chi-Squared Statistic:", round(chi_squared_OR_results[[place]]$`Chi-Squared Statistic`,2), "\n")
+  cat("p-value:", round(chi_squared_OR_results[[place]]$`p-value`,2), "\n")
+  cat("Odds Ratio:", round(chi_squared_OR_results[[place]]$`OR`,2), "\n")
 }
 
 ```
 
-По результатам анализа, место посещения, которое наиболее ассоциировано с возникновением пневмонии, - это торговый центр, так как он имеет p-value < 0.05 и наибольший хи-квадрат (8.54).
+По результатам анализа, посещение торгового центра наиболее ассоциировано с возникновением пневмонии: посещение ТЦ повышает шансы заболеть пневмонией на 55% (OR = 1.55). Критерий хи-квадрат подтверждает, что между посещением ТЦ и заболеванием пневмонией есть статистически значимая ассоциации (хи-квадрат 8.54, p-value < 0.05).
+
+Посещение общественных мероприятий и ресторанов не ассоциировано с возникновением пневмонии, что подтверждается OR близким к 1 и статистически незначимым хи-квадратом.
 
 
