@@ -121,7 +121,8 @@ hogwarts %>%
 
 ```{r}
 hogwarts %>%
-  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), names_to = "week", values_to = "score") %>%
+  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), 
+               names_to = "week", values_to = "score") %>%
   filter(week %in% paste0("week ", 1:17)) %>%
   mutate(week = factor(week, levels = paste0("week ", 1:17))) %>%
   ggplot(aes(x = week, y = score, fill = blood_status)) +
@@ -154,11 +155,12 @@ hogwarts %>%
 ```{r}
 
 hogwarts %>%
-  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), names_to = "week", values_to = "score") %>%
+  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), 
+               names_to = "week", values_to = "score") %>%
   filter(week %in% paste0("week ", 1:17)) %>%
   mutate(week = factor(week, levels = paste0("week ", 1:17))) %>%
-  group_by(week, blood_status) %>% # group by week and blood status to calculate the number of students of each blood status
-  summarise(score = sum(score), count = n()) %>% # calculate the sum of scores and the number of students
+  group_by(week, blood_status) %>% 
+  summarise(score = sum(score), count = n()) %>% 
   mutate(week = fct_reorder(week, score, .desc = TRUE)) %>% #reorder
   ggplot(aes(x = week, y = score, fill = blood_status)) +
   geom_col() +
@@ -186,7 +188,8 @@ hogwarts %>%
 
 ```{r}
 hogwarts %>%
-  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), names_to = "week", values_to = "score") %>%
+  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), 
+               names_to = "week", values_to = "score") %>%
   filter(week %in% paste0("week ", 1:17)) %>%
   mutate(week = factor(week, levels = paste0("week ", 1:17))) %>%
   mutate(Blood_and_Sex = paste0(blood_status, " ", sex)) %>%
@@ -251,7 +254,8 @@ P.S. Число студентов различных происхождений
 
 ```{r}
 hogwarts %>%
-  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), names_to = "week", values_to = "score") %>%
+  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), 
+               names_to = "week", values_to = "score") %>%
   filter(week %in% paste0("week ", 1:17)) %>%
   mutate(week = factor(week, levels = paste0("week ", 1:17))) %>%
   mutate(Blood_and_Sex = paste0(blood_status, " ", sex)) %>%
@@ -320,8 +324,8 @@ pl1 <- hogwarts %>%
   labs(y = "Результат экзамена", x = "Экзамен",
        title = "Распределение результатов экзаменов") +
   theme_minimal() +
-  #rename the legend
-  scale_fill_manual(values = c("Potions_exam" = "#ECB939", "Study of ancient runs_exam" = "#41A6D9"),
+  theme(axis.text.x = element_blank()) +
+  scale_fill_manual(values = c("Potions_exam" = "purple", "Study of ancient runs_exam" = "#41A6D9"),
                     labels = c("Potions_exam" = "Зельеварение", "Study of ancient runs_exam" = "Древние руны"))
 
 
@@ -333,7 +337,7 @@ pl2 <- hogwarts %>%
              y = `Study of ancient runs_exam`, 
              color = course, 
              shape = course)) +
-  geom_jitter(size = 5, width = 2, height = 2) +  # Apply jittering for position
+  geom_jitter(size = 3, width = 2, height = 2) +  
   scale_shape_manual(values = c("1" = 49, "2" = 50, "3" = 51, "4" = 52, "5" = 53, "6" = 54, "7" = 55)) +
   ylim(0, 100) +
   xlim(0, 100) +
@@ -343,52 +347,24 @@ pl2 <- hogwarts %>%
               se = FALSE, 
               method = "lm", 
               color = "grey")  +  # Single smooth line for all courses
-  labs(title = "Результаты экзаменов по зельеварению и древним рунам по курсам",
+  labs(title = "Результаты по курсам",
        x = "Экзамен по зельеварению",
        y = "Экзамен по древним рунам")
 
 
-
-hogwarts %>%
+pl3 <- hogwarts %>%
   pivot_longer(cols = c(Potions_exam, `Study of ancient runs_exam`), 
                names_to = "Exam", 
                values_to = "Score") %>%
-  group_by(Exam, sex) %>%
-  summarise(Average_Score = mean(Score, na.rm = TRUE), .groups = "drop") %>%
-  ggplot(aes(x = Exam, y = Average_Score, fill = sex)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.8), color = "black") +
-  labs(title = "Average Scores for Potions and Ancient Runes Exams by Gender",
-       x = "Exam",
-       y = "Average Score",
-       fill = "Gender") +
-  theme_minimal()
-  
-```
-```{r}
-
-
-# Reshape the data to long format
-hogwarts_long <- hogwarts %>%
-  pivot_longer(cols = c(Potions_exam, `Study of ancient runs_exam`), 
-               names_to = "Exam", 
-               values_to = "Score")
-
-# Summarize the data to calculate the average score by Exam, Gender, and Course
-hogwarts_summary <- hogwarts_long %>%
   group_by(Exam, sex, course) %>%
-  summarise(Average_Score = mean(Score, na.rm = TRUE), .groups = "drop")
-
-# Convert course to a factor
-hogwarts_summary <- hogwarts_summary %>%
-  mutate(course = as.factor(course))
-
-# Create the grouped bar plot
-ggplot(hogwarts_summary, aes(x = course, y = Average_Score, fill = interaction(Exam, sex))) +
+  summarise(Average_Score = mean(Score, na.rm = TRUE), .groups = "drop") %>%
+  mutate(course = as.factor(course)) %>%
+  ggplot(aes(x = course, y = Average_Score, fill = interaction(Exam, sex))) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.9), color = "black") +
-  labs(title = "Average Scores for Potions and Ancient Runes Exams by Gender and Course",
-       x = "Course",
-       y = "Average Score",
-       fill = "Exam and Gender") +
+  labs(title = "Средние оценки по курсу и полу",
+       x = "Курс",
+       y = "Средняя оценка",
+       fill = "Курс и пол") +
   theme_minimal() +
   scale_fill_manual(values = c(
     "Potions_exam.male" = "#1f78b4",
@@ -400,6 +376,27 @@ ggplot(hogwarts_summary, aes(x = course, y = Average_Score, fill = interaction(E
 
 #rename the legend
 
+```
+
+
+
+```{r}
+library(ggpubr)
+
+
+combined <- ggarrange(
+  ggarrange(pl1, pl2, ncol = 2, nrow = 1),
+  pl3,  # pl3 centered below
+  ncol = 1, 
+  nrow = 2,
+  heights = c(1, 0.8)  # Adjust heights, giving more space to pl3
+)
+
+combined <- annotate_figure(
+  combined,
+  top = text_grob("Сравнение результатов экзаменов по зельеварению и древним рунам", face = "bold", size = 14)
+)
+combined
 ```
 
 
@@ -416,3 +413,69 @@ ggarrange. (по 1 б. за первый и график и правильную
 следующим образом: маглорожденные,, чистокровные, полукровки.
 Скорректируйте название оси. Если у вас возникают сложности,
 обратитесь к шпаргалке по пакету forcats от posit. (Дополнительные 0.5 б.)
+
+```{r}
+pl4 <- hogwarts %>%
+  pivot_longer(cols = c(Potions_exam), 
+               names_to = "Exam", 
+               values_to = "Score") %>%
+  group_by(blood_status) %>%
+  summarise(Average_Score = mean(Score, na.rm = TRUE), .groups = "drop") %>%
+  mutate(blood_status = fct_relevel(blood_status, "Muggle-borned", "Pure-blood", "Half-blood")) %>%
+  ggplot(aes(x = blood_status, y = Average_Score, fill = blood_status)) +
+  geom_col() +
+  labs(y = "Средний балл",
+       x = "Происхождение",
+       fill = "Происхождение") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Muggle-borned" = "#ECB939", "Half-blood" = "#41A6D9", "Pure-blood" = "#1F5D25"),
+                    labels = c("Muggle-borned" = "Маглорожденные", "Half-blood" = "Полукровки", "Pure-blood" = "Чистокровные")) +
+  theme(axis.text.x = element_blank())
+```
+
+Чистокровные студенты имеют самый высокий средний балл по зельеварению. Возможной причиной является то, что преподаватели зельеварения (например, Снейп) могут быть более благосклонны к чистокровным студентам, и таким образом мотивировать их больше к изучению предмета.
+
+Косвенным подтверждением этой гипотезы может служить график, показывающий распределение студентов по происхождению и факультету. У Слизерина пропорция чистокровных студентов заметно выше, чем у других факультетов.
+
+```{r}
+pl5 <- hogwarts %>%
+    mutate(blood_status = fct_relevel(blood_status, "Muggle-borned", "Pure-blood", "Half-blood")) %>%
+  group_by(house, blood_status) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(x = house, y = count, fill = blood_status)) +
+  geom_col(position = "dodge") +
+  labs(y = "Количество студентов",
+       x = "Факультет",
+       fill = "Происхождение") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Muggle-borned" = "#ECB939", "Half-blood" = "#41A6D9", "Pure-blood" = "#1F5D25"),
+                    labels = c("Muggle-borned" = "Маглорожденные", "Half-blood" = "Полукровки", "Pure-blood" = "Чистокровные")) +
+  geom_text(aes(label = count), position = position_dodge(width = 1), vjust = -0.5)
+```
+```{r}
+ggarrange(pl4, pl5, ncol = 2, common.legend = TRUE, legend = "bottom")
+```
+
+# Воспроизведение графика
+Дополнительное задание на 4 балла. Воспроизведите график
+максимально близко к оригиналу и проинтерпретируйте его.
+Распределение числа баллов у студентов разных факультетов, фасетированное по полу
+
+```{r}
+
+hogwarts %>%
+  select(id, sex, house, result) %>%
+  pivot_longer(cols = result,
+               names_to = "week", values_to = "score") %>%
+  ggplot() +
+  geom_violin(aes(x = house, y = score, fill = house), scale = "width") +
+  facet_wrap(~sex)
+  
+
+
+
+
+  
+```
+
+
