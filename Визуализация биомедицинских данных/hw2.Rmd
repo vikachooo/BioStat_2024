@@ -11,7 +11,10 @@ library(tidyverse)
 ```
 
 ```{r}
-hogwarts <- read_csv("Визуализация биомедицинских данных/data/hogwarts.csv")
+hogwarts <- read_csv("data/hogwarts_2024.csv")
+
+hogwarts <- hogwarts %>%
+  rename_with(~ str_replace_all(., " ", "_"), contains("exam"))
 ```
 
 
@@ -32,7 +35,7 @@ ggplot(hogwarts, aes(x = result, y = Herbology_exam)) +
   theme_minimal()
 
 ```
-Связи между тавологией и суммарным баллом за год нет.
+*Связь между тавологией и суммарным баллом - прямопропорциональная. *
 
 
 ##2.
@@ -49,9 +52,9 @@ ggplot(hogwarts, aes(x = result, y = Herbology_exam)) +
 
 ```{r}
 hogwarts %>%
-  pivot_longer(cols = c(Herbology_exam, `Muggle studies_exam`, Charms_exam, Potions_exam), 
+  pivot_longer(cols = c(Herbology_exam, Muggle_studies_exam, Charms_exam, Potions_exam), 
                names_to = "Exam", values_to = "Score") %>%
-  ggplot(aes(x = result, y = Score, color = house)) +  
+  ggplot(aes(x = result, y = Score, color = house)) +  # color (not fill) because it is geom_point, it doesn't have filled areas
   geom_point() +
   geom_smooth(aes(group = 1), method = "lm", se = FALSE, color = "black") +
   scale_color_manual(
@@ -68,13 +71,50 @@ hogwarts %>%
       "Slytherin" = "Слизерин"
     )
   ) + 
-  labs(y = "Результат экзамена", x = "Суммарный балл за год") +
+  labs(y = "Результат экзамена", x = "Суммарный балл за год",
+       color = "Факультет") +
+  theme_minimal()
+```
+На совсем понятна формулировка задания, поэтому сделаю также фасетирование.
+
+
+```{r}
+hogwarts %>%
+  pivot_longer(cols = c(Herbology_exam, Muggle_studies_exam, Charms_exam, Potions_exam), 
+               names_to = "Exam", values_to = "Score") %>%
+  ggplot(aes(x = result, y = Score, color = house)) +  
+  geom_point() +
+  geom_smooth(aes(group = 1), method = "lm", se = FALSE, color = "black") +
+  
+  # Facet the plot by Exam
+  facet_wrap(~Exam, scales = "free_y",  labeller = as_labeller(c("Herbology_exam" = "Травоведение",
+                                                                 "Muggle_studies_exam"= "Магловедение",
+                                                                  "Charms_exam" = "Прорицания",
+                                                                  "Potions_exam" = "Зельеварению"))) +  
+  
+  scale_color_manual(
+    values = c(
+      "Gryffindor" = "#C50000", 
+      "Hufflepuff" = "#ECB939", 
+      "Ravenclaw" = "#41A6D9", 
+      "Slytherin" = "#1F5D25"
+    ),
+    labels = c(
+      "Gryffindor" = "Гриффиндор",
+      "Hufflepuff" = "Хаффлпафф",
+      "Ravenclaw" = "Когтевран",
+      "Slytherin" = "Слизерин"
+    )
+  ) + 
+  labs(y = "Результат экзамена", x = "Суммарный балл за год",
+       color = "Факультет") +
   theme_minimal()
 
-
 ```
-Студенты всех факультетов имеют широкий разброс баллов за выбранные для анализа экзамены и выраженной зависимости результатов по этим экзаменам от суммарного балла за год не наблюдается.
-Однако график показывает кластеризацию студентов по факультетам. Студенты из Гриффиндора и Слизерина имеют как самые высокие, так и самые низкие итоговые баллы за год. При этом студенты из Когтеврана и Хаффлпаффа имеют меньший разброс баллов за год и более средние результаты по экзаменам (примерно 100 и 0, соответственно). 
+
+*Суммарный балл за год прямопропорционален оценке за экзамен по травологии, магловедению и прорицанием. Суммарный балл за год обратно пропорционален оценке за экзамен по зельюварению. При этом студенты  Слизерина выделяются из общей массы: результаты по зельеварению у них высокие как при низких суммарных баллах, так и при высоких.*
+
+
 
 
 
@@ -88,7 +128,7 @@ hogwarts %>%
 
 ```{r}
 hogwarts %>%
-  pivot_longer(cols = c(Herbology_exam, `Muggle studies_exam`, Charms_exam, Potions_exam), 
+  pivot_longer(cols = c(Herbology_exam, Muggle_studies_exam, Charms_exam, Potions_exam), 
                names_to = "Exam", values_to = "Score") %>%
   ggplot(aes(x = result, y = Score, color = house)) +  
   geom_point() +
@@ -119,27 +159,43 @@ hogwarts %>%
 можете обратиться к шпаргалке по dplyr от posit. Выдвиньте гипотезу (или
 гипотезы), почему распределение получилось именно таким. (1 б.)
 
+Непонятна формулировка, сделаю двумя способами.
+
 ```{r}
+#1 - ignore
+
 hogwarts %>%
-  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), 
+  pivot_longer(cols = matches('week_(1[0-7]|[1-9])'), 
                names_to = "week", values_to = "score") %>%
-  filter(week %in% paste0("week ", 1:17)) %>%
-  mutate(week = factor(week, levels = paste0("week ", 1:17))) %>%
-  ggplot(aes(x = week, y = score, fill = blood_status)) +
+  filter(week %in% paste0("week_", 1:17)) %>%
+  mutate(week = factor(week, levels = paste0("week_", 1:17))) %>%
+  ggplot(aes(x = week, y = score, fill = bloodStatus)) +
   geom_col() +
   labs(y = "Суммарный балл за неделю", x = "Неделя") +
   theme_minimal() +
-  scale_x_discrete(labels = function(x) str_replace(x, "week ", ""))
+  scale_x_discrete(labels = function(x) str_replace(x, "week_", ""))
+
+
+#2 - prefered 
+
+hogwarts %>% 
+  rowwise() %>%
+  mutate(score_1st = sum(c_across(matches('week_(1[0-7]|[1-9])')))) %>%
+  group_by(bloodStatus) %>% 
+  summarise(Points_1st = sum(score_1st)) %>%
+  ggplot() +
+  geom_col(aes(x = bloodStatus,
+               y = Points_1st,
+               fill = bloodStatus), show.legend=FALSE)+
+  labs(x = "Происхождение", y = "Баллы за первый семестр") +
+  theme_minimal()
 
 
 ```
-С 1 по 17 неделю студенты смешанного происхождения имеют как самые высокие баллы, так и самые низкие. Это может быть связано с тем, что они могут наследовать как магические способности, так и магловские, но разные студенты используют их в разной пропорции и с разной эффективностью.
+*С 1 по 17 неделю студенты смешанного происхождения имеют как самые высокие баллы, так и самые низкие. Это может быть связано с тем, что они могут наследовать как магические способности, так и магловские, но разные студенты используют их в разной пропорции и с разной эффективностью.*
 
-Студенты чистокровного происхождения имеют средние баллы, однако их разброс меньше, чем у студентов смешанного происхождения.
-Студенты маглорожденные имеют больший разброс баллов в обе стороны, чем студенты чистокровного происхождения, но меньший разброс, чем у студентов смешанного происхождения. Это может быть связано с тем, что маглорожденные не наследуют магические способности, но могут быть более мотивированы к учебу, чем чистокровные, однако чаще получают низкие баллы, так как учатся волшебству с нуля.
 
-Гипотеза
-- Студенты смешанного происхождения имеют самые высокие и самые низкие баллы, так как как микс магических и магловских способностей может быть как преимуществом, так и недостатком.  
+*Гипотеза: Студенты смешанного происхождения имеют самые высокие баллы, так как как микс магических и магловских способностей может быть  преимуществом.*
 
 
 
@@ -153,25 +209,48 @@ hogwarts %>%
 гипотезой из пункта 1? (1 б.)
 
 ```{r}
+#1 - ignore
 
 hogwarts %>%
-  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), 
+  pivot_longer(cols = matches('week_(1[0-7]|[1-9])'), 
                names_to = "week", values_to = "score") %>%
-  filter(week %in% paste0("week ", 1:17)) %>%
-  mutate(week = factor(week, levels = paste0("week ", 1:17))) %>%
-  group_by(week, blood_status) %>% 
+  filter(week %in% paste0("week_", 1:17)) %>%
+  mutate(week = factor(week, levels = paste0("week_", 1:17))) %>%
+  group_by(week, bloodStatus) %>% 
   summarise(score = sum(score), count = n()) %>% 
   mutate(week = fct_reorder(week, score, .desc = TRUE)) %>% #reorder
-  ggplot(aes(x = week, y = score, fill = blood_status)) +
+  ggplot(aes(x = week, y = score, fill = bloodStatus)) +
   geom_col() +
   geom_label(aes(label = count), position = position_stack(vjust = 0.5), color = "white",
              fontface = "bold", label.size = 0.25) + # add labels
   labs(y = "Суммарный балл за неделю", x = "Неделя") +
   theme_minimal() +
-  scale_x_discrete(labels = function(x) str_replace(x, "week ", ""))
+  scale_x_discrete(labels = function(x) str_replace(x, "week_", ""))
+
+
+
+#2 - preferred
+
+hogwarts %>% 
+  rowwise() %>%
+  mutate(score_1st = sum(c_across(matches('week_(1[0-7]|[1-9])')))) %>%
+  group_by(bloodStatus) %>% 
+  summarise(Points_1st = sum(score_1st), N_st = length(score_1st)) %>%
+  ggplot() +
+  geom_col(aes(x = fct_reorder(bloodStatus, Points_1st, .desc = T),
+               y = Points_1st,
+               fill = bloodStatus), show.legend = FALSE) +
+  geom_label(aes(x = fct_reorder(bloodStatus, Points_1st, .desc = T),
+               y = Points_1st,
+               label = N_st),
+             size = 3,
+            vjust= 0.1) +
+  labs(x = "Происхождение", y = "Баллы за первый семестр") +
+  theme_minimal()
+
 
 ```
-Этот график опроверг мою гипотезу в части самых низких баллов у студентов смешанного происхождения. Студенты смешанного происхождения в большинстве недель имеют самые высокие баллы, а студенты маглорожденные и чистокровные - чаще оказываются внизу рейтинга.
+*Этот график опроверг мою гипотезу, так как скорее всего причина высоких суммарных баллов в наибольшем количестве студентов смешанного происхождения.*
 
 
 
@@ -187,12 +266,14 @@ hogwarts %>%
 
 
 ```{r}
+# 1 - ignore
+
 hogwarts %>%
-  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), 
+  pivot_longer(cols = matches('week_(1[0-7]|[1-9])'), 
                names_to = "week", values_to = "score") %>%
-  filter(week %in% paste0("week ", 1:17)) %>%
-  mutate(week = factor(week, levels = paste0("week ", 1:17))) %>%
-  mutate(Blood_and_Sex = paste0(blood_status, " ", sex)) %>%
+  filter(week %in% paste0("week_", 1:17)) %>%
+  mutate(week = factor(week, levels = paste0("week_", 1:17))) %>%
+  mutate(Blood_and_Sex = paste0(bloodStatus, " ", sex)) %>%
   group_by(week, Blood_and_Sex) %>% # +sex
   summarise(score = sum(score), count = n(), .groups = "drop") %>% # calculate the sum of scores and the number of students
   #mutate(week = fct_reorder(week, score, .desc = TRUE)) %>% #reorder
@@ -201,7 +282,7 @@ hogwarts %>%
            width = 1.2) +
   geom_text(aes(label = count, color = Blood_and_Sex), 
             position = position_dodge(width = 0.9),
-            size = 4,
+            size = 3,
             fontface = "bold",
             hjust = 1) + # hjust options: 0 - left, 0.5 - center, 1 - right
   labs(y = "Суммарный балл за неделю", 
@@ -209,27 +290,27 @@ hogwarts %>%
        fill = "Происхождение и пол",
        title = "Суммарный балл по неделям с разбивкой по происхождению и полу") +
   theme_minimal() +
-  scale_x_discrete(labels = function(x) str_replace(x, "week ", ""),
+  scale_x_discrete(labels = function(x) str_replace(x, "week_", ""),
                    expand = expansion(mult = c(0.05, 0.1))) + # +5% to the left and =10% to the rigth
   scale_color_manual(
     values = c(
-      "Muggle-borned male" = "#ECB935",
-      "Muggle-borned female" = "#FFD700",
-      "Half-blood male" = "#41A6D9",
-      "Half-blood female" = "#87CEEB",
-      "Pure-blood male" = "#1F5D25",
-      "Pure-blood female" = "#32CD32"
+      "muggle-born male" = "#ECB935",
+      "muggle-born female" = "#FFD700",
+      "half-blood male" = "#41A6D9",
+      "half-blood female" = "#87CEEB",
+      "pure-blood male" = "#1F5D25",
+      "pure-blood female" = "#32CD32"
     ),
     guide = "none"  # Disable legend for the color aesthetic
   ) +
   scale_fill_manual(
     values = c(
-      "Muggle-borned male" = "#ECB939",
-      "Muggle-borned female" = "#FFD700",
-      "Half-blood male" = "#41A6D9",
-      "Half-blood female" = "#87CEEB",
-      "Pure-blood male" = "#1F5D25",
-      "Pure-blood female" = "#32CD32"
+      "muggle-born male" = "#ECB935",
+      "muggle-born female" = "#FFD700",
+      "half-blood male" = "#41A6D9",
+      "half-blood female" = "#87CEEB",
+      "pure-blood male" = "#1F5D25",
+      "pure-blood female" = "#32CD32"
     )
   )
 
@@ -239,6 +320,50 @@ ggplot2::ggsave("blood_sex_weeks.png", width = 10, height = 6, dpi = 300)
 
 
 
+# 2 - preffered 
+
+hogwarts %>% 
+  rowwise() %>%
+  mutate(score_1st = sum(c_across(matches('week_(1[0-7]|[1-9])'))),
+         Blood_and_Sex = paste0(bloodStatus, " ", sex)) %>%
+  group_by(Blood_and_Sex) %>% 
+  summarise(Points_1st = sum(score_1st), N_st = length(score_1st)) %>%
+  ggplot() +
+  geom_col(aes(x = fct_reorder(Blood_and_Sex, Points_1st, .desc = T),
+               y = Points_1st,
+               fill = Blood_and_Sex), show.legend = FALSE) +
+  geom_label(aes(x = fct_reorder(Blood_and_Sex, Points_1st, .desc = T),
+                 y = Points_1st,
+                 label = N_st,
+                 color = Blood_and_Sex),  # Map label color to Blood_and_Sex for consistency
+             size = 3,
+             vjust = 0.1) +
+  scale_color_manual(
+    values = c(
+      "muggle-born male" = "#ECB935",
+      "muggle-born female" = "#FFD700",
+      "half-blood male" = "#41A6D9",
+      "half-blood female" = "#87CEEB",
+      "pure-blood male" = "#1F5D25",
+      "pure-blood female" = "#32CD32"
+    ),
+    guide = "none"  # Disable legend for the color aesthetic
+  ) +
+  scale_fill_manual(
+    values = c(
+      "muggle-born male" = "#ECB935",
+      "muggle-born female" = "#FFD700",
+      "half-blood male" = "#41A6D9",
+      "half-blood female" = "#87CEEB",
+      "pure-blood male" = "#1F5D25",
+      "pure-blood female" = "#32CD32"
+    )
+  ) +
+  labs(x = "" , y = "Баллы за первый семестр",
+       fill= "Происхождение и Пол",
+       title = "Суммарный балл за первый семестр с разбивкой по происхождению и полу") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ```
 
@@ -253,12 +378,14 @@ P.S. Число студентов различных происхождений
 б.)
 
 ```{r}
+#1 - ignore
+
 hogwarts %>%
-  pivot_longer(cols = matches('week (1[0-7]|[1-9])'), 
+  pivot_longer(cols = matches('week_(1[0-7]|[1-9])'), 
                names_to = "week", values_to = "score") %>%
-  filter(week %in% paste0("week ", 1:17)) %>%
-  mutate(week = factor(week, levels = paste0("week ", 1:17))) %>%
-  mutate(Blood_and_Sex = paste0(blood_status, " ", sex)) %>%
+  filter(week %in% paste0("week_", 1:17)) %>%
+  mutate(week = factor(week, levels = paste0("week_", 1:17))) %>%
+  mutate(Blood_and_Sex = paste0(bloodStatus, " ", sex)) %>%
   group_by(week, Blood_and_Sex) %>% # +sex
   summarise(score = sum(score), count = n(), .groups = "drop") %>% # calculate the sum of scores and the number of students
   #mutate(week = fct_reorder(week, score, .desc = TRUE)) %>% #reorder
@@ -270,34 +397,86 @@ hogwarts %>%
        fill = "Происхождение и пол",
        title = "Суммарный балл по неделям с разбивкой по происхождению и полу") +
   theme_minimal() +
-  scale_x_discrete(labels = function(x) str_replace(x, "week ", ""),
+  scale_x_discrete(labels = function(x) str_replace(x, "week_", ""),
                    expand = expansion(mult = c(0.05, 0.1))) + # +5% to the left and =10% to the rigth
   scale_color_manual(
     values = c(
-      "Muggle-borned male" = "#ECB935",
-      "Muggle-borned female" = "#FFD700",
-      "Half-blood male" = "#41A6D9",
-      "Half-blood female" = "#87CEEB",
-      "Pure-blood male" = "#1F5D25",
-      "Pure-blood female" = "#32CD32"
+      "muggle-born male" = "#ECB935",
+      "muggle-born female" = "#FFD700",
+      "half-blood male" = "#41A6D9",
+      "half-blood female" = "#87CEEB",
+      "pure-blood male" = "#1F5D25",
+      "pure-blood female" = "#32CD32"
     ),
     guide = "none"  # Disable legend for the color aesthetic
   ) +
   scale_fill_manual(
     values = c(
-      "Muggle-borned male" = "#ECB939",
-      "Muggle-borned female" = "#FFD700",
-      "Half-blood male" = "#41A6D9",
-      "Half-blood female" = "#87CEEB",
-      "Pure-blood male" = "#1F5D25",
-      "Pure-blood female" = "#32CD32"
+      "muggle-born male" = "#ECB935",
+      "muggle-born female" = "#FFD700",
+      "half-blood male" = "#41A6D9",
+      "half-blood female" = "#87CEEB",
+      "pure-blood male" = "#1F5D25",
+      "pure-blood female" = "#32CD32"
     )
   ) +
   coord_flip()
+
+
+#2 - PREFFERED
+
+
+hogwarts %>% 
+  rowwise() %>%
+  mutate(score_1st = sum(c_across(matches('week_(1[0-7]|[1-9])'))),
+         Blood_and_Sex = paste0(bloodStatus, " ", sex)) %>%
+  group_by(Blood_and_Sex) %>% 
+  summarise(Points_1st = sum(score_1st), N_st = length(score_1st)) %>%
+  ggplot() +
+  geom_col(aes(x = fct_reorder(Blood_and_Sex, Points_1st, .desc = F), #поменяли на F чтобы перевернуть порядок
+               y = Points_1st,
+               fill = Blood_and_Sex), show.legend = FALSE) +
+  geom_label(aes(x = fct_reorder(Blood_and_Sex, Points_1st, .desc = F), #поменяли на F чтобы перевернуть порядок
+                 y = Points_1st,
+                 label = N_st,
+                 color = Blood_and_Sex),  # Map label color to Blood_and_Sex for consistency
+             size = 3,
+             vjust = 0.1) +
+  scale_color_manual(
+    values = c(
+      "muggle-born male" = "#ECB935",
+      "muggle-born female" = "#FFD700",
+      "half-blood male" = "#41A6D9",
+      "half-blood female" = "#87CEEB",
+      "pure-blood male" = "#1F5D25",
+      "pure-blood female" = "#32CD32"
+    ),
+    guide = "none"  # Disable legend for the color aesthetic
+  ) +
+  scale_fill_manual(
+    values = c(
+      "muggle-born male" = "#ECB935",
+      "muggle-born female" = "#FFD700",
+      "half-blood male" = "#41A6D9",
+      "half-blood female" = "#87CEEB",
+      "pure-blood male" = "#1F5D25",
+      "pure-blood female" = "#32CD32"
+    )
+  ) +
+  labs(x = "" , y = "",
+       fill= "Происхождение и Пол",
+       title = "Суммарный балл за первый семестр с разбивкой по происхождению и полу") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+         plot.title = element_text(size=11, face = "bold")) +
+  coord_flip()
+
 ```
 `coord_flip()` - это функция, которая позволяет поменять местами оси x и y. Она может быть полезна, когда у вас есть длинные подписи на оси x, которые не помещаются на графике, или когда мы хотим сделать горизонтальный барплот. Однако, ее использование может быть затруднено, если есть текстовые метки, которые необходимо повернуть, чтобы они были читаемыми. 
 
-В нашем случае (последний график) перестановка осей не вносит принципиальной разницы. Однако бывают случаи, когда мы хотим сфокусироваться над разбросе велечин вокруг 0 или другой точки (Forest plot).
+В нашем случае (последний график) подписи длинные поэтому перестановка визуально улучшает график.
+
+Также бывают случаи, когда мы хотим сфокусироваться над разбросе велечин вокруг 0 или другой точки (Forest plot).
 
 
 
@@ -315,18 +494,22 @@ hogwarts %>%
 график должен занимать нижнюю строку целиком. (2 б).
 
 ```{r}
-# box plot for potions exam and ancient runes exam
+
 pl1 <- hogwarts %>%
-  pivot_longer(cols = c(Potions_exam, `Study of ancient runs_exam`), 
+  pivot_longer(cols = c(Potions_exam, Study_of_ancient_runes_exam), 
                names_to = "Exam", values_to = "Score") %>%
   ggplot(aes(x = Exam, y = Score, fill = Exam)) +
   geom_boxplot() +
   labs(y = "Результат экзамена", x = "Экзамен",
-       title = "Распределение результатов экзаменов") +
+       title = "Распределение результатов экзаменов",
+       fill = "Экзамен") +
   theme_minimal() +
-  theme(axis.text.x = element_blank()) +
-  scale_fill_manual(values = c("Potions_exam" = "purple", "Study of ancient runs_exam" = "#41A6D9"),
-                    labels = c("Potions_exam" = "Зельеварение", "Study of ancient runs_exam" = "Древние руны"))
+  theme(plot.title = element_text(size = 10, hjust = 0, face = "bold"),
+        axis.text.x = element_blank(),
+        axis.title.y = element_text(size=8),
+        axis.title.x = element_blank()) +
+  scale_fill_manual(values = c("Potions_exam" = "purple", "Study_of_ancient_runes_exam" = "#41A6D9"),
+                    labels = c("Potions_exam" = "Зельеварение", "Study_of_ancient_runes_exam" = "Древние руны"))
 
 
 
@@ -334,15 +517,19 @@ pl1 <- hogwarts %>%
 pl2 <- hogwarts %>%
   mutate(course = as.factor(course)) %>%
   ggplot(aes(x = Potions_exam, 
-             y = `Study of ancient runs_exam`, 
+             y = Study_of_ancient_runes_exam, 
              color = course, 
-             shape = course)) +
-  geom_jitter(size = 3, width = 2, height = 2) +  
+             shape = course,
+             alpha = 0.8)) +
+  geom_jitter(size = 2, width = 2, height = 2) +  
   scale_shape_manual(values = c("1" = 49, "2" = 50, "3" = 51, "4" = 52, "5" = 53, "6" = 54, "7" = 55)) +
   ylim(0, 100) +
   xlim(0, 100) +
   theme_minimal() + 
-  theme(legend.position = "none") +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 10, hjust = 0.5, face = "bold"),
+        axis.title.x = element_text(size=8),
+        axis.title.y = element_text(size=8)) +
   geom_smooth(aes(group = 1),  
               se = FALSE, 
               method = "lm", 
@@ -353,7 +540,7 @@ pl2 <- hogwarts %>%
 
 
 pl3 <- hogwarts %>%
-  pivot_longer(cols = c(Potions_exam, `Study of ancient runs_exam`), 
+  pivot_longer(cols = c(Potions_exam, Study_of_ancient_runes_exam), 
                names_to = "Exam", 
                values_to = "Score") %>%
   group_by(Exam, sex, course) %>%
@@ -369,12 +556,13 @@ pl3 <- hogwarts %>%
   scale_fill_manual(values = c(
     "Potions_exam.male" = "#1f78b4",
     "Potions_exam.female" = "pink",
-    "Study of ancient runs_exam.male" = "blue",
-    "Study of ancient runs_exam.female" = "pink4"
+    "Study_of_ancient_runes_exam.male" = "blue",
+    "Study_of_ancient_runes_exam.female" = "pink4"
   )) +
-  theme(axis.text.x = element_text(hjust = 1))
-
-#rename the legend
+  theme(axis.text.x = element_text(hjust = 1),
+        axis.title.x = element_text(size=8),
+        axis.title.y = element_text(size=8),
+        plot.title = element_text(size=10, hjust =0.5, face = "bold"))
 
 ```
 
@@ -389,7 +577,7 @@ combined <- ggarrange(
   pl3,  # pl3 centered below
   ncol = 1, 
   nrow = 2,
-  heights = c(1, 0.8)  # Adjust heights, giving more space to pl3
+  heights = c(1, 0.8)  # more space to pl3
 )
 
 combined <- annotate_figure(
@@ -419,63 +607,129 @@ pl4 <- hogwarts %>%
   pivot_longer(cols = c(Potions_exam), 
                names_to = "Exam", 
                values_to = "Score") %>%
-  group_by(blood_status) %>%
+  group_by(bloodStatus) %>%
   summarise(Average_Score = mean(Score, na.rm = TRUE), .groups = "drop") %>%
-  mutate(blood_status = fct_relevel(blood_status, "Muggle-borned", "Pure-blood", "Half-blood")) %>%
-  ggplot(aes(x = blood_status, y = Average_Score, fill = blood_status)) +
+  mutate(blood_status = fct_relevel(bloodStatus, "muggle-born", "pure-blood", "half-blood")) %>%
+  ggplot(aes(x = blood_status, y = Average_Score, fill = blood_status)) + 
   geom_col() +
-  labs(y = "Средний балл",
+  labs(y = "Средний балл по зельеварению",
        x = "Происхождение",
        fill = "Происхождение") +
   theme_minimal() +
-  scale_fill_manual(values = c("Muggle-borned" = "#ECB939", "Half-blood" = "#41A6D9", "Pure-blood" = "#1F5D25"),
-                    labels = c("Muggle-borned" = "Маглорожденные", "Half-blood" = "Полукровки", "Pure-blood" = "Чистокровные")) +
-  theme(axis.text.x = element_blank())
+  scale_fill_manual(values = c("muggle-born" = "#ECB939", "pure-blood" = "#1F5D25", "half-blood" = "#41A6D9")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+
 ```
 
-Чистокровные студенты имеют самый высокий средний балл по зельеварению. Возможной причиной является то, что преподаватели зельеварения (например, Снейп) могут быть более благосклонны к чистокровным студентам, и таким образом мотивировать их больше к изучению предмета.
 
-Косвенным подтверждением этой гипотезы может служить график, показывающий распределение студентов по происхождению и факультету. У Слизерина пропорция чистокровных студентов заметно выше, чем у других факультетов.
 
 ```{r}
 pl5 <- hogwarts %>%
-    mutate(blood_status = fct_relevel(blood_status, "Muggle-borned", "Pure-blood", "Half-blood")) %>%
-  group_by(house, blood_status) %>%
-  summarise(count = n()) %>%
-  ggplot(aes(x = house, y = count, fill = blood_status)) +
-  geom_col(position = "dodge") +
-  labs(y = "Количество студентов",
+  pivot_longer(cols = c(Potions_exam), 
+               names_to = "Exam", 
+               values_to = "Score") %>%
+  group_by(house) %>%
+  summarise(Average_Score = mean(Score, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = house, y = Average_Score, fill = house)) +  
+  geom_bar(stat = "identity") + 
+  labs(y = "Средний балл по зельеварению",
        x = "Факультет",
-       fill = "Происхождение") +
+       fill = "Факультет") +
   theme_minimal() +
-  scale_fill_manual(values = c("Muggle-borned" = "#ECB939", "Half-blood" = "#41A6D9", "Pure-blood" = "#1F5D25"),
-                    labels = c("Muggle-borned" = "Маглорожденные", "Half-blood" = "Полукровки", "Pure-blood" = "Чистокровные")) +
-  geom_text(aes(label = count), position = position_dodge(width = 1), vjust = -0.5)
+  scale_fill_manual(values = c("Gryffindor" = "#C50000", 
+                               "Hufflepuff" = "#ECB939", 
+                               "Ravenclaw" = "#41A6D9", 
+                               "Slytherin" = "#1F5D25")
+             ) +
+theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+
+
+
 ```
+
+
+
 ```{r}
-ggarrange(pl4, pl5, ncol = 2, common.legend = TRUE, legend = "bottom")
+ggarrange(pl4, pl5, ncol = 2)
 ```
+
+Чистокровные студенты имеют самый высокий средний балл по зельеварению. Возможной причиной является то, что преподаватели зельеварения (например, Снейп) могут быть более благосклонны к чистокровным студентам. Факультет Слизерин известен своим предпочтением к чистокровным студентам, а также известнр, что основатель факультета был силен в зельеварении. Несмотря на то, что сейчас нет драматической разницы в пропорциях студентов различного происхождения на разных факультетах, исторически сложившиеся традиции могут делать преподавателей зельеварения более благосклонными к  студентам Слизерина.
+
 
 # Воспроизведение графика
 Дополнительное задание на 4 балла. Воспроизведите график
 максимально близко к оригиналу и проинтерпретируйте его.
 Распределение числа баллов у студентов разных факультетов, фасетированное по полу
 
+![](images/hw2plot.png)
+
 ```{r}
+
+# for geom_point
+house_averages <- hogwarts %>%
+  group_by(house) %>%
+  summarise(avg_res = mean(result, na.rm = TRUE))
+
 
 hogwarts %>%
   select(id, sex, house, result) %>%
   pivot_longer(cols = result,
                names_to = "week", values_to = "score") %>%
   ggplot() +
-  geom_violin(aes(x = house, y = score, fill = house), scale = "width") +
-  facet_wrap(~sex)
+  geom_violin(aes(x = house, y = score, fill = house)) +
+  geom_boxplot(aes(x = house, y = score), 
+               fill = "white",
+               width = 0.05,  
+               outlier.color = "white",  
+               outlier.fill = "white",   
+               color = "grey") +
+  geom_point(data = house_averages, aes(x = house, y = avg_res), 
+             shape = 23, 
+             size = 5, 
+             color = "black", 
+             fill = "darkred", 
+             stroke = 1.3)  +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "salmon", size = 1) +
+  facet_wrap(~sex, labeller = as_labeller(c("female" = "Девочки", "male" = "Мальчики"))) +
+  scale_fill_manual(
+    values = c(
+      "Gryffindor" = "#C50000", 
+      "Hufflepuff" = "#ECB939", 
+      "Ravenclaw" = "#41A6D9", 
+      "Slytherin" = "#1F5D25"
+    ),
+    labels = c(
+      "Gryffindor" = "Гриффиндор",
+      "Hufflepuff" = "Хаффлпафф",
+      "Ravenclaw" = "Когтевран",
+      "Slytherin" = "Слизерин"
+    ))  +
+  scale_y_continuous(breaks = seq(-300, 300, 50)) +
+  labs(y = "Количество очков",
+       fill = "Факультет",
+       title = "Баллы студентов Хогвартса",
+       subtitle = "Распределение числа баллов у студентов различных факультетов Хогвартса в 2023-2024 учебном году",
+       caption = "Источник: нездоровая фантазия автора лекции") +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        plot.title = element_text(size=11, family = "Georgia", hjust =0.5),
+        plot.subtitle = element_text(size=8, color = "salmon3", family = "Georgia", hjust = 0.5),
+        plot.caption = element_text(size = 5, family = "Georgia", hjust = 1, vjust = 1),  
+        panel.grid = element_blank(),
+        strip.background = element_rect(fill = "gray", color = NA),
+        legend.position = c(0.5, 0.2), 
+        legend.justification = "center",  
+        legend.direction = "vertical",
+        legend.text = element_text(size = 8, face = "italic"),
+        legend.key.size = unit(0.3, "cm"),
+        legend.title = element_text(family = "Georgia"),
+        axis.title.y = element_text(family = "Georgia"),
+        text = element_text(family = "Georgia") #  Шрифты не работают??
+) 
   
-
-
-
-
   
 ```
+
 
 

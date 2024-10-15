@@ -1,0 +1,34 @@
+ФИО,y,type,x,fill,theme
+Авилова Альбина Алексеевна,Defence against the dark arts_exam,boxplot,house,blood status,theme_classic
+Аксенова Мария Сергеевна,Charms_exam,jitter,sex,house,theme_bw
+Андреева Дарья Вячеславовна,Defence against the dark arts_exam,violin,sex,house,theme_linedraw
+Башарина Анна Александровна,Potions_exam,violin,blood status,house,theme_bw
+Белинская Мария Александровна,Potions_exam,boxplot,blood status,house,theme_void
+Беляков Матвей Дмитриевич,Divinations_exam,violin,blood status,house,theme_classic
+Бердинских Евгений Сергеевич,Astronomy_exam,boxplot,sex,blood status,theme_bw
+Владимиров Иван Сергеевич,Charms_exam,jitter,house,sex,theme_transparent
+Гарифулин Равиль Расимович,Potions_exam,violin,blood status,sex,theme_light
+Гущина Светлана Валерьевна,Study of ancient runs_exam,jitter,sex,house,theme_linedraw
+Ендальцева Евгения,Astronomy_exam,violin,sex,house,theme_transparent
+Зенкова Арина Константиновна,Arythmancy_exam,violin,sex,blood status,theme_transparent
+Казанцева Анастасия Владимировна,Charms_exam,boxplot,sex,blood status,theme_linedraw
+Кондратьева Анна Вячеславовна,Muggle studies_exam,boxplot,blood status,sex,theme_dark
+Линд Катерина Валерьевна,Muggle studies_exam,violin,blood status,sex,theme_linedraw
+Лысенко Яков Дмитриевич,Astronomy_exam,violin,house,sex,theme_transparent
+Мурашова Лада Александровна,Flying_exam,jitter,house,blood status,theme_transparent
+Небритов Евгений Геннадьевич,Defence against the dark arts_exam,violin,sex,house,theme_minimal
+Немолочнова Арина Георгиевна,Study of ancient runs_exam,boxplot,blood status,house,theme_light
+Новикова Наталья Борисовна,Charms_exam,violin,house,blood status,theme_void
+Ракин Александр Ильич,Flying_exam,boxplot,blood status,sex,theme_void
+Русакова Анастасия Александровна,Potions_exam,violin,house,blood status,theme_transparent
+Саблева Наталья Александровна,Defence against the dark arts_exam,violin,blood status,sex,theme_bw
+Смирнов Сергей Владимирович,Muggle studies_exam,boxplot,house,blood status,theme_bw
+Снопков Владимир Владимирович,Charms_exam,jitter,sex,blood status,theme_void
+Солопов Максим Витальевич,Herbology_exam,violin,blood status,sex,theme_minimal
+Строкотова Анастасия Владимировна,Herbology_exam,boxplot,sex,blood status,theme_transparent
+Терентьева Анастасия Викторовна,Arythmancy_exam,boxplot,house,blood status,theme_classic
+Туканов Данил Александрович,Herbology_exam,jitter,sex,blood status,theme_light
+Филимонов Дмитрий Алексеевич,Defence against the dark arts_exam,jitter,sex,house,theme_classic
+Чебурашкин-Антипов Дмитрий Николаевич,Muggle studies_exam,jitter,house,sex,theme_minimal
+Эль Дор Майя Ахмадовна,Arythmancy_exam,violin,house,blood status,theme_classic
+Юрова Мария Николаевна,Transfiguration_exam,violin,sex,blood status,theme_dark

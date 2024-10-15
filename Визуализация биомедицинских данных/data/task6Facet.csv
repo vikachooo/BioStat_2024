@@ -1,0 +1,34 @@
+ФИО,geom,facet,factor1,factor2,theme
+Авилова Альбина Алексеевна,histogram,gridCol,blood status,NA,theme_classic
+Аксенова Мария Сергеевна,density,wrap,house,NA,theme_bw
+Андреева Дарья Вячеславовна,density,gridRow,course,NA,theme_transparent
+Башарина Анна Александровна,density,gridCol,house,NA,theme_void
+Белинская Мария Александровна,box/violin/jitter,gridRow,sex,NA,theme_transparent
+Беляков Матвей Дмитриевич,histogram,gridCol,sex,NA,theme_minimal
+Бердинских Евгений Сергеевич,density,grid2Dim,sex,house,theme_classic
+Владимиров Иван Сергеевич,box/violin/jitter,gridCol,blood status,NA,theme_classic
+Гарифулин Равиль Расимович,box/violin/jitter,grid2Dim,blood status,course,theme_bw
+Гущина Светлана Валерьевна,histogram,grid2Dim,house,blood status,theme_linedraw
+Ендальцева Евгения,density,grid2Dim,sex,house,theme_bw
+Зенкова Арина Константиновна,density,wrap,course,NA,theme_void
+Казанцева Анастасия Владимировна,density,grid2Dim,course,house,theme_classic
+Кондратьева Анна Вячеславовна,box/violin/jitter,grid2Dim,sex,house,theme_bw
+Линд Катерина Валерьевна,density,wrap,course,NA,theme_transparent
+Лысенко Яков Дмитриевич,box/violin/jitter,grid2Dim,blood status,house,theme_light
+Мурашова Лада Александровна,box/violin/jitter,gridCol,blood status,NA,theme_linedraw
+Небритов Евгений Геннадьевич,histogram,gridCol,blood status,NA,theme_transparent
+Немолочнова Арина Георгиевна,density,grid2Dim,sex,blood status,theme_transparent
+Новикова Наталья Борисовна,density,gridRow,house,NA,theme_linedraw
+Ракин Александр Ильич,histogram,grid2Dim,blood status,course,theme_dark
+Русакова Анастасия Александровна,box/violin/jitter,gridCol,sex,NA,theme_linedraw
+Саблева Наталья Александровна,box/violin/jitter,grid2Dim,sex,blood status,theme_transparent
+Смирнов Сергей Владимирович,box/violin/jitter,wrap,sex,NA,theme_transparent
+Снопков Владимир Владимирович,density,grid2Dim,sex,blood status,theme_minimal
+Солопов Максим Витальевич,box/violin/jitter,gridCol,blood status,NA,theme_light
+Строкотова Анастасия Владимировна,density,wrap,blood status,NA,theme_void
+Терентьева Анастасия Викторовна,histogram,gridCol,house,NA,theme_void
+Туканов Данил Александрович,histogram,gridCol,house,NA,theme_transparent
+Филимонов Дмитрий Алексеевич,box/violin/jitter,wrap,sex,NA,theme_bw
+Чебурашкин-Антипов Дмитрий Николаевич,density,grid2Dim,blood status,course,theme_bw
+Эль Дор Майя Ахмадовна,density,grid2Dim,house,blood status,theme_void
+Юрова Мария Николаевна,histogram,gridRow,blood status,NA,theme_minimal

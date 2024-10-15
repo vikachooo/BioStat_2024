@@ -1,0 +1,35 @@
+Имя,Фамилия,x,y,colour,fill,shape,stroke
+Анна,Андрейченко,Herbology exam,Arithmancy exam,gray70,bloodStatus,21,1.1
+Дмитрий,Белоусов,Herbology exam,Flying exam,gray6,wandCore,23,1.4
+Евгений,Бердинских,Flying exam,Study of ancient runes exam,gray26,house,22,1.7
+Алина,Божко,Flying exam,Divinations exam,gray51,wandCore,22,1.1
+Ксения,Вехова,Charms exam,Flying exam,grey51,bloodStatus,24,1.7
+Екатерина,Востокова,History of magic exam,Care of magical creatures exam,gray14,bloodStatus,22,1.9
+Ирина,Гаранина,Flying exam,Care of magical creatures exam,gray11,wandCore,25,1.7
+Никита,Гладышев/Лаптев,Study of ancient runes exam,Herbology exam,grey25,house,23,1.6
+Анастасия,Горшкова,History of magic exam,Divinations exam,grey13,wandCore,21,1.9
+Иван,Деркачев,Arithmancy exam,Charms exam,darkgrey,wandCore,21,2
+Никита,Зайцев,Muggle studies exam,Study of ancient runes exam,grey72,wandCore,25,1.9
+Виктория,Зайцева,Muggle studies exam,Arithmancy exam,gray5,bloodStatus,23,1.5
+Иван,Зарва,History of magic exam,Arithmancy exam,dimgray,sex,25,1.1
+Арина,Зенкова,Potions exam,Herbology exam,grey37,bloodStatus,24,1.1
+Устин,Золотиков,Herbology exam,Flying exam,grey48,bloodStatus,21,1.3
+Медер,Иманалиев,Study of ancient runes exam,Arithmancy exam,grey15,house,25,1.6
+Анастасия,Исаева,Potions exam,Arithmancy exam,gray78,bloodStatus,25,1.7
+Мария,Касьянова,Flying exam,Astronomy exam,lightslategray,house,25,1.8
+Марина,Козырева,Herbology exam,Charms exam,grey58,sex,24,1.7
+Андрей,Кравец,Muggle studies exam,Flying exam,grey84,house,24,1.2
+Наталья,Ласкина,Astronomy exam,Study of ancient runes exam,grey3,wandCore,22,1.4
+Катерина,Линд,Astronomy exam,Muggle studies exam,grey41,wandCore,24,1.7
+Елена,Марочкина,Arithmancy exam,Care of magical creatures exam,grey69,sex,22,1.1
+Евгения,Намиот,Astronomy exam,Potions exam,grey95,house,25,1.2
+Виктория,Пороло,Herbology exam,Flying exam,grey17,bloodStatus,22,1.6
+Анастасия,Потамошнева,Muggle studies exam,Arithmancy exam,gray35,house,22,1.4
+Александр,Ракин,Arithmancy exam,Divinations exam,grey83,sex,22,1.3
+Валентина,Салдаева,Defence against the dark arts exam,Herbology exam,grey23,wandCore,21,1.4
+Сергей,Смирнов,Defence against the dark arts exam,Astronomy exam,gray31,wandCore,25,1.6
+Олег,Тарасов,Potions exam,Muggle studies exam,gray37,sex,25,1.4
+Антон,Тихоненко,Study of ancient runes exam,Divinations exam,gray17,wandCore,24,1.8
+Виктория,Уварова,Muggle studies exam,Astronomy exam,gray25,sex,24,1.7
+Олеся,Цветкова,Flying exam,Divinations exam,gray53,bloodStatus,25,1.2
+Елена,Юрлова,Flying exam,Divinations exam,gray71,wandCore,22,1.6
