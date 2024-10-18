@@ -420,6 +420,34 @@ for (var in cat_variables) {
 1) Создайте корреляционную матрицу с визуализацией и поправкой на множественные сравнения. Объясните, когда лучше использовать корреляционные матрицы и в чём минусы и плюсы корреляционных исследований.
 
 ```{r}
+library(corrplot)
+library(ggcorrplot)
+library(Hmisc)
+
+cor_matrix <- cleaned_data |>
+  select(where(is.numeric)) |>
+  cor(use = "pairwise.complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", tl.col = "black", addCoef.col = "black")
+
+
+# с поправкой на множественные сравнения
+
+rcor_results <- rcorr(as.matrix(cleaned_data
+                |> select(where(is.numeric)))) 
+
+rcor <- rcor_results$r
+p_cor <- rcor_results$P
+
+p_cor_adj <- matrix(p.adjust(p_cor, method = "bonferroni"),
+                    nrow = nrow(p_cor),
+                    ncol = ncol(p_cor))
+
+
+
+ggcorrplot(rcor, method = "square", type = "upper", tl.col = "black", p.mat = p_cor_adj, sig.level = 0.05)
+
+# сомнительно получилось, без поправки как-то лучше
 
 
 
@@ -429,11 +457,96 @@ for (var in cat_variables) {
 
 1) Постройте регрессионную модель для переменной **stroke**. Опишите процесс построения
 
+
+1. Построим логистическую регрессию, так как зависимая переменная категориальная (0,1). Буду использовать backward stepwise метод - сначала включим все переменные, затем будем удалять незначимые (так быстрее).
+
 ```{r}
 
+colnames(cleaned_data)
+model1 <- glm(stroke ~ gender + age + hypertension + heart_disease + ever_married + work_type + work_type + residence_type + avg_glucose_level + BMI + smoking_status, data = cleaned_data, family = "binomial")
+
+summary(model1)
+
+```
+```{r}
+# здесь оставила незначимые BMI и smoking_status, так как вдруг они все-таки станут значимыми 
+
+model2 <- glm(stroke ~ age + hypertension + heart_disease + avg_glucose_level + BMI + smoking_status, data = cleaned_data, family = "binomial")
+
+summary(model2)
+```
+
+```{r}
+# в итоге остались только изначально значимые факторы
+
+model3 <- glm(stroke ~ age + hypertension + heart_disease + avg_glucose_level, data = cleaned_data, family = "binomial")
+
+summary(model3)
+```
+2. Приведу результаты модели к виду, удобному для дальнейшего анализа и переводим коэффициенты в отношения шансов, чтобы было проще интерпретировать результаты.
+
+```{r}
+library (devtools)
+library (broom)
+
+Tidy_LogModel_a <- tidy(model3)
+Tidy_LogModel <- subset(Tidy_LogModel_a, term != "(Intercept)")
+
+
+Tidy_LogModel$OR <- exp(Tidy_LogModel$estimate)
+Tidy_LogModel$LL <- exp(Tidy_LogModel$estimate - (1.96 * Tidy_LogModel$std.error))
+Tidy_LogModel$UL <- exp(Tidy_LogModel$estimate + (1.96 * Tidy_LogModel$std.error))
+Tidy_LogModel
+```
+
+3. Визуализируем отношение шансов. Так легко сказать, значимо ли влияние фактора на исход. Если ДИ пересекает 1, то влияние не значимо.
+
+```{r}
+
+ggplot(Tidy_LogModel, 
+       aes(x = term, y = OR, ymin = LL, ymax = UL)) + 
+  geom_pointrange(aes(col = factor(term)), 
+                  position=position_dodge(width=0.30), size = 1) + 
+  ylab("Odds ratio & 95% CI") + 
+  geom_hline(aes(yintercept = 1)) + 
+  scale_color_discrete(name = "Term") + 
+  labs(x = "") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1)) +
+  coord_flip() +
+  theme_minimal()
+```
+
+4. Построим ROC-кривую и посчитаем AUC. Это позволит оценить качество модели. 
+
+```{r}
+library(pROC)
+
+predicted_probs <- predict(model3, type = "response")
+roc_curve <- roc(cleaned_data$stroke, predicted_probs)
+plot(roc_curve, col = "blue")
 
 
 ```
+
+```{r}
+auc <- auc(roc_curve)
+
+
+if (auc < 0.7) {
+  print(paste("AUC = ", auc, ". AUC < 0.7, model is bad"))
+} else {
+  print(paste("AUC = ", auc, ". AUC > 0.7, model is good"))
+}
+
+```
+
+
+Таким образом, гипертензия и возраст наиболее значимо влияют на вероятность инсульта. Качетсво модели хорошее. 
+
+
+
+
+
 
 
 
