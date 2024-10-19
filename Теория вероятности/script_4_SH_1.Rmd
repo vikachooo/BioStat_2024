@@ -1,0 +1,134 @@
+---
+title: "Statistical hypothesis testing (part 1)"
+author: "Evgeny Bakin"
+date: '2024-10-19'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+## Эксперимент №2 из предыдущей лекции: Можно ли доверять доверительному интервалу?
+
+```{r exp_2, echo=FALSE, fig.height=15}
+
+num_centers <- 1000 # Сколько центров поучаствует в эксперименте?
+
+sample_size <- 300 # Количество пациентов, прошедших, терапию
+True_Hg_improve <- 1 # Истинное среднее изменение гемоглобина - т.е. мы моделируем не работающий препарат
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+H0_Hg_improve <- 0 # Наша нулевая гипотеза (и она соответсвует истине) - мы бы не хотели ее отвергать
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rnorm(sample_size*num_centers, mean = True_Hg_improve, sd = Hg_sd)
+)
+
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  do(broom::tidy(t.test(Hg_change ~ 1, conf.level = 0.95, data = .))) %>% # из выбранного ДИ следуает, что наша ошибка первого рода - 5%
+  dplyr::select(estimate, conf.low, conf.high) %>% 
+  mutate(CI_width = conf.high - conf.low) %>% 
+  mutate(out = ifelse((H0_Hg_improve < conf.high) & (H0_Hg_improve > conf.low), 'Fail to reject H0', 'Reject H0'))
+
+table(trial_results$out)
+
+```
+
+*Как зависит ошибка первого рода от размера выборки и вариативности признака?*
+
+Ошибка первого рода не зависит от размера выборки
+
+Если выборка из нормального распределения, а границы ДИ мы считаем через квантили  t-распределения, то ДИ хорошо работал как часы даже на очень малых выборках (см. 3 занятие). Поэтому при нормальном распределение ошибка первого рода не зависит от размера выборкт всегда будет как мы ее определили. 
+
+С варитиавностью аналогично, просто ширина ДИ будет варьировать, но он все равно будет захватывать истинное значение.
+
+Таким образом, мы можем сами регулировать ошибку первого рода.
+
+*Что произойдет, если мы нарушим H0?*
+
+Изменим True_Hg_improve с 0 на 1. 
+То есть теперь Н0 не верна.
+Тогда если мы Fail to reject H0, то мы совершаем ошибку второго рода.
+
+Ошибка второго рода = Fail to reject H0 когда Н0 неверна.
+
+Вероятности ошибки второго рода = Fail to reject H0 / (Fail to reject H0 + Reject H0)
+У нас примерно 200/1000 = 0.2 
+
+*От чего зависит величина ошибки II рода?*
+
+Мощность - способность обнаружить эффект, если этот эффект есть. Вероятность отвергнуть нулевую гипотезу, когда она ложная. Вероятность не пропустить работающий препарат, если он правда работает.
+
+Мощность равна = 1 - вероятность ошибки II рода.
+ 
+Если эффект препарата растет, то мощность тоже растет, а вероятность ошибки второго рода падает.
+
+Мощность увеличивается с увеличением размера выборки и уменьшением вариативности признака.
+
+Таким образом, мощность теста зависит от истинной эффективности препарата и размера выборки.
+
+Мы можем установить желаемую ошибку первого рода, но ошибка второго будет как будет. Мощность можно посчитать (примерно) на основе предыдущих данных клинических исследований
+
+## Визуализация
+
+```{r exp_2_viz, echo=FALSE, fig.height=15}
+
+ggplot(trial_results, aes(y = center_ID)) +
+  geom_errorbar(mapping = aes(xmin = conf.low, xmax = conf.high, color = out), size = 2) +
+  geom_vline(xintercept=H0_Hg_improve, linetype="dashed", 
+                color = "black", size=2) +
+  theme_bw() +
+  theme(text = element_text(size = 30))  
+
+
+```
+
+## Эксперимент №3 из предыдущей лекции: Точно можно доверять?
+
+```{r exp_3, echo=FALSE}
+
+num_centers <- 1000 # Сколько центров поучаствует в эксперименте?
+
+sample_size <- 100 # Количество пациентов, прошедших, терапию
+True_avg_recovery_time <- 20 # Истинное среднее время до выздоровления (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+H0_avg_recovery_time  <- 20 # Наша нулевая гипотеза (исторический контроль)
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  recovery_time = rexp(sample_size*num_centers, rate = 1/True_avg_recovery_time) # Экспоненциальное распределение вместо нормального для времени до выздоровления
+)
+
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  do(broom::tidy(t.test(recovery_time ~ 1, conf.level = 0.95, data = .))) %>% 
+  dplyr::select(estimate, conf.low, conf.high) %>% 
+  mutate(CI_width = conf.high - conf.low) %>% 
+  mutate(out = ifelse((H0_avg_recovery_time < conf.high) & (H0_avg_recovery_time > conf.low), 'Fail to reject H0', 'Reject H0'))
+
+table(trial_results$out)
+
+
+
+
+
+```
+
+Как зависит ошибка первого рода от размера выборки?
+
+Она уменьшается с увеличением размера выборки.
+
+Даже при 95% ДИ, когда ошибка первого рода установлена на 5%, при ненормальном распределение ошибка первого рода будет больше 5%. При малых выборках ошибка первого рода будет в 2 больше, но при увеличении выборки до 100 ошибка первого рода будет близкой к 5%.
+
+
+
+
+

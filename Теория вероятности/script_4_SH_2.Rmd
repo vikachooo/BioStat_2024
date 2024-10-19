@@ -1,0 +1,122 @@
+---
+title: "Statistical hypothesis testing (part 2)"
+author: "Evgeny Bakin"
+date: '2024-10-19'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+## Эксперимент №1: границы критической области и вероятность ошибки I рода
+## Мы во Вселенной, где препарат не работает (True_Hg_improve <- 0)
+
+```{r exp_2, echo=FALSE, fig.height=4, fig.width=6}
+
+num_centers <- 10000 # Сколько раз повторим эксперимент?
+
+sample_size <- 300 # Количество пациентов, прошедших, терапию
+True_Hg_improve <- 0 # Истинное среднее изменение гемоглобина
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rnorm(sample_size*num_centers, mean = True_Hg_improve, sd = Hg_sd)
+)
+
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  dplyr::summarise(t = sqrt(sample_size)*mean(Hg_change)/sd(Hg_change)) %>% # t-test formula
+  ungroup()
+
+hist(trial_results$t)
+
+alpha <- 0.05
+a <- qt(alpha/2, df = sample_size-1) # Нижняя граница - 0.025 квантиль
+b <- qt(1 - alpha/2, df = sample_size-1) # Верхняя граница - 0.975 квантиль
+
+abline(v = a, col="blue", lwd=3, lty=2)
+abline(v = b, col="blue", lwd=3, lty=2)
+
+trial_errors <- trial_results %>% 
+  mutate(out = ifelse((t < b) & (t > a), 'Fail to reject H0', 'Reject H0'))
+
+table(trial_errors$out)
+
+```
+
+Значения за пределами а и б - ошибки первого рода (так как значения больше критического и ближе к 0, но при этом на самом деле Н0 верна).
+
+Если наша исходная выборка распределена нормально (элементы выборки взяты из нормально распределенной генеральной совокупности), то посчитанные значения t будут иметь распределение Стьюдента, а значит мы можем использовать t-распределение для определения критической области.
+
+Задаем альфа - допустимая вероятность ошибки первого рода (5%)
+Тогда а и б - квантили t-распределения, которые соответствуют альфа/2 и 1-альфа/2 квантилям.(0.025 и 0.975 квантили - в нормально/т-распределении это -+ 1.96). Соотвественно, только 5% значений выйдут за пределы критической области.
+
+1. Посчитали t-статистику для каждого центра
+2. Посчитали квантили t-распределения (-+1.96)
+3. Сравнили t-статистику с квантилями
+4. Если t-статистика попала внуть значений квантилей, то мы принимаем нулевую гипотезу, если не попало и вышло за пределы - отвергаем нулевую гипотезу.
+
+На малых выборках, примерно до 10 - значения а и б могут двухкратно увеливаться, так как t-распределение имеет более тяжелые хвосты, чем нормальное распределение.
+
+После 10 их значения стабилизируются вокруг -+1.96.
+
+На малых выборках нельзя использовать -+1.96 (которые часто зафиксирован в формуле), и нужно рассчитывать и использовать реальные квантили t-распределения (то есть как выше в коде самим считать).
+
+
+## Эксперимент №2: границы критической области и вероятность ошибки II рода
+## Оказывается, что препарат работает (True_Hg_improve <- 2)
+
+```{r exp_2, echo=FALSE, fig.height=3, fig.width=6}
+
+num_centers <- 1000 # Сколько раз повторим эксперимент?
+
+sample_size <- 70 # Количество пациентов, прошедших, терапию
+True_Hg_improve <- 2 # Истинное среднее изменение гемоглобина - изменили с 0 на 2 
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rnorm(sample_size*num_centers, mean = True_Hg_improve, sd = Hg_sd)
+)
+
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  dplyr::summarise(t = sqrt(sample_size)*mean(Hg_change)/sd(Hg_change)) %>% 
+  ungroup()
+
+hist(trial_results$t)
+
+trial_errors <- trial_results %>% 
+  mutate(out = ifelse((t < b) & (t > a), 'Fail to reject H0', 'Reject H0'))
+
+
+abline(v = a, col="blue", lwd=3, lty=2)
+abline(v = b, col="blue", lwd=3, lty=2)
+
+table(trial_errors$out)
+
+```
+
+
+Значения внутри а и б  (до 1.96, -1.96 просто скрылся) - ошибки второго рода (так как значения внутри области критических значений и близко к 0, но при этом на самом деле Н0 неверна).
+
+Чем больше размер эффекта (True_Hg_improve поменяй на 3, на 4 и тд) - тем меньше значений попадает в критическую область, и тем меньше ошибок второго рода (смещение распределений далеко от 0 и границ).
+
+
+
+
+
+
+
+
+
+
+
+

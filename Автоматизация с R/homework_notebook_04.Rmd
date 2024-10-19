@@ -163,24 +163,6 @@ cleaned_data %>%
 
 library(flextable)
 
-#1
-cleaned_data %>% 
-  group_by(stroke) %>% 
-  select(where(is.numeric)) %>% 
-  summarise(across(everything(), list(n = ~length(.x), 
-                                     NA_values = ~sum(is.na(.)), 
-                                     mean = ~mean(., na.rm = TRUE), 
-                                     median = ~median(., na.rm = TRUE), 
-                                     sd = ~sd(., na.rm = TRUE), 
-                                     q25 = ~quantile(., 0.25, na.rm = TRUE), 
-                                     q75 = ~quantile(., 0.75, na.rm = TRUE), 
-                                     IQR = ~IQR(., na.rm = TRUE), 
-                                     min = ~min(., na.rm = TRUE),  
-                                     max = ~max(., na.rm = TRUE)))) |> #можно было бы сохранить этот лист в переменную и потом преобразовать в функцию
-  pivot_longer(cols = -stroke, names_to = "statistic", values_to = "value") #важно привести все переменные в один формат, иначе ошибка
-
-
-#2
 
 statistics <- list(
                                      `_n` = ~length(.x) |> round(0) |> as.character(), 
@@ -430,35 +412,53 @@ cor_matrix <- cleaned_data |>
 
 corrplot(cor_matrix, method = "color", type = "upper", tl.col = "black", addCoef.col = "black")
 
+```
+```{r}
 
-# с поправкой на множественные сравнения
+#library(psych)
 
-rcor_results <- rcorr(as.matrix(cleaned_data
-                |> select(where(is.numeric)))) 
+cor_results <- cleaned_data |>
+  select(where(is.numeric)) |>
+  psych:: corr.test(adjust = "bonferroni") 
 
-rcor <- rcor_results$r
-p_cor <- rcor_results$P
+# correlation coefficients
+cor_matrix <- cor_results$r
 
-p_cor_adj <- matrix(p.adjust(p_cor, method = "bonferroni"),
-                    nrow = nrow(p_cor),
-                    ncol = ncol(p_cor))
-
-
-
-ggcorrplot(rcor, method = "square", type = "upper", tl.col = "black", p.mat = p_cor_adj, sig.level = 0.05)
-
-# сомнительно получилось, без поправки как-то лучше
+# p-values adjusted
+p_cor <- cor_results$p
 
 
+ggcorrplot(cor_matrix,
+       method = "square",
+       tl.col = "black", p.mat = p_cor, sig.level = 0.05,
+       lab = TRUE, # show correlation coefficients
+       insig = "blank" # hide insignificant correlations
+       ) 
 
 ```
+Корреляционные матрицы используются для оценки взаимосвязи между числовыми и порядковыми переменными (метод Пирсона) и между категориальными переременными (метод Спирмена). 
+
+Корреляционный анализ может использоваться для отбора переменных для последующего регрессионного анализа.
+
+Плюсы: 
+- позволяют оценить силу взаимосвязи (модуль коэффициента)
+- направление взаимосвязи (знак коэффициента)
+- быстро оценить взаимосвязь между всеми парами переменных
+- красивая визуализация
+
+Минусы: 
+- не позволяют делать выводы о причинно-следственных связях, 
+- не учитывают нелинейные взаимосвязи. 
+
+
+
 
 ## Моделирование
 
 1) Постройте регрессионную модель для переменной **stroke**. Опишите процесс построения
 
 
-1. Построим логистическую регрессию, так как зависимая переменная категориальная (0,1). Буду использовать backward stepwise метод - сначала включим все переменные, затем будем удалять незначимые (так быстрее).
+1. Построим логистическую регрессию, так как зависимая переменная категориальная (0,1). Буду использовать backward stepwise метод - сначала включим все переменные (кроме id), затем будем удалять незначимые (так быстрее).
 
 ```{r}
 
