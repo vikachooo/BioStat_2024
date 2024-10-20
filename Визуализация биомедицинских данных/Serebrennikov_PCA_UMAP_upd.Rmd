@@ -1,0 +1,188 @@
+---
+title: 'Эксплораторный анализ - 1.1'
+subtitle: 'Пример PCA'
+author: "Дмитрий Серебренников"
+output: 
+  html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Загрузим данные и пакеты
+
+```{r}
+# Загрузим библиотеки
+library(dplyr)
+library(ggplot2)
+theme_set(theme_minimal())
+library(ggpubr)
+
+library(factoextra)
+library(FactoMineR)
+library(ggbiplot) # devtools::install_github("vqv/ggbiplot")
+
+# https://hbiostat.org/data/repo/cdiabetes
+df_full <- read.csv('data/diabetes.csv') %>% 
+  select(-(bp.2s:bp.2d)) %>%  # Удалим лишние колонки
+  filter(if_all(where(is.numeric), ~!is.na(.))) # Remove rows with NA in numeric column. 
+
+
+#Another approach - imputation (e.g. via nearest neighbors) - заполнение пропусков с помощью ближайших соседей
+
+
+# skimr библиотека для просмотра данных (аналог summary) - отдельные таблицы для числовых и категориальных переменных
+skimr::skim(df_full)
+```
+
+...
+
+# Principal component analysis (PCA)
+
+Example with `diabetes` data
+
+```{r}
+df <- df_full %>% 
+  select(is.numeric) %>% 
+  select(-id)
+
+df.pca <- prcomp(df, 
+                scale = T) 
+```
+
+Оценим результат.
+
+```{r}
+summary(df.pca)
+```
+
+```{r}
+fviz_eig(df.pca, 
+         addlabels = T, 
+         ylim = c(0, 30))
+```
+
+
+### Анализ переменных по PCA
+
+
+```{r}
+fviz_pca_var(df.pca, col.var = "contrib")
+```
+Мы видим, что вес, ширина бедер и ширина талии, а также чуть-чуть рост больше всего вносят вклад в варацию данных. Они друг с другом прямо коррелируют.
+hdl (High Density Lipoprotein) отрицательно коррелирует с этими показателями. 
+
+Остальные переменные не коррелируют с этими показателями.
+
+Оговорка: эти наблюдения правдивы только для части данных.
+
+
+```{r}
+fviz_contrib(df.pca, choice = "var", axes = 1, top = 24)
+fviz_contrib(df.pca, choice = "var", axes = 2, top = 24) 
+fviz_contrib(df.pca, choice = "var", axes = 3, top = 24) 
+```
+
+*Красная линия*
+
+Если корреляции между переменной нет, то все переменные должны вносить одинаковый вклад в каждую компоненту, и их вклад будет иметь равномерное распределение. Красная линия - уровень такого вклада. То есть мы 100% разделили на количество переменных. 
+
+Линия - условный ноль. Если вклад переменной выше красной линии, то это значит, что переменная вносит больший вклад в компоненту, чем остальные переменные.
+
+
+## Анализ наблюдений по PCA
+
+
+```{r}
+ggbiplot(df.pca, 
+         scale=0, alpha = 0.1) + 
+  theme_minimal()
+```
+
+
+```{r}
+ggbiplot(df.pca, 
+         scale=0, 
+         groups = as.factor(df_full$gender), 
+         ellipse = T,
+         alpha = 0.2) +
+  theme_minimal()
+```
+Особо ничего не видно.
+
+
+А что с возрастными группами:
+
+```{r}
+ggbiplot(df.pca, 
+         scale=0, 
+         groups = as.factor(df_full$frame), 
+         ellipse = T,
+         alpha = 0.2) +
+  theme_minimal()
+```
+
+Красные - это пропущенные значения, не убрали их из данных.
+
+Наблюдения из группы Large frame тяготеют в сторону высоких значений роста, бедер и талии. Small frame - в обратном направлении.
+
+Но так как метод сработал не очень хорошо, из этих наблюдений не стоит делать больших выводов.
+
+
+# UMAP
+
+PCA - отличный метод, когда мы хотим одновременно понять соотношения колонок и строк, но часто бывают ситуации, когда вам лучше понять близость строк друг к другу и сделать "сгустки" наблюдений, а не разряженные облака. Для таких задач применяют UMAP.
+
+UMAP (Uniform Manifold Approximation and Projection) - это алгоритм уменьшения размерности, основанный на методах теории топологии. В отличие от PCA, он оценивает не глобальное отношение переменных, а локальную близость строк. Сначала мы оцениваем многомерное пространство, а затем по-очереди начинаем уменьшать его размерность, но так, чтобы при каждом следующем снижении изначально близкие друг другу точки становились ещё ближе (образуем своеобразные воронки).
+
+Важно (!), UMAP имеет тенденцию сохранять локальные расстояния между точками в ущерб глобальному отображению (т.е. имеет тенденцию создавать "сгустки", а не разреженные облака). Благодаря этому он отлично подходит для понимания структуры отношения строк, но при этом он даёт крайне ограниченное количество способов анализировать колонки.
+
+Вы можете прочитать детальнее [здесь](https://umap-learn.readthedocs.io/en/latest/how_umap_works.html).
+
+### Tidymodels approach
+
+Код не работает 
+
+```{r, message=FALSE,warning=FALSE}
+library(tidymodels)
+library(irlba)
+library(embed)
+#install.packages("Seurat")
+library(Seurat)
+library(Matrix)
+#install.packages("irlba", type="source")
+
+
+#install.packages("C:/Users/VictoriaZaitceva/Downloads/Matrix_1.7-0.tar.gz", repos = NULL, type="source")
+#library("Matrix")
+
+
+#remove.packages("SeuratObject")
+#remove.packages("Matrix")
+# Restart R-session
+#install.packages("SeuratObject")
+
+
+umap_prep <- recipe(~., data = df) %>% # "техническая" строка, нужная для работы фреймворка tidymodels
+  step_normalize(all_predictors()) %>% # нормируем все колонки
+  step_umap(all_predictors()) %>%  # проводим в UMAP. Используем стандартные настройки. Чтобы менять ключевой параметр (neighbors), нужно больше погружаться в машинное обучение
+  prep() %>%  # "техническая" строка, нужная для работы фреймворка tidymodels. Мы выполняем все степы выше 
+  juice() # Финальная строка - приводим результаты UMAP к стандартизированному датасету
+
+```
+
+Визуализиуем два первых измерения UMAP и добавим информацию о возрастных группах и диабет-статусе:
+
+```{r}
+umap_prep %>%
+  ggplot(aes(UMAP1, UMAP2)) + #  # можно добавить раскраску 
+  geom_point(aes(color = as.character(df_full$frame)), 
+             alpha = 0.7, size = 2) +
+  labs(color = NULL) +
+  theme_minimal()
+```
+
+
+
+

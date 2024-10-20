@@ -1,0 +1,574 @@
+---
+title: "BI_retraining_basic_datavis_2024_2"
+author: "B.V. Sotnikov"
+date: "2024-09-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, error = FALSE, fig.width=16, fig.height=10)
+
+library(tidyverse)
+library(ggpubr)
+```
+
+## Загрузка данных
+
+```{r}
+hogwarts <- read_csv("data/hogwarts_2024.csv")
+hogwarts |> head()
+```
+
+### Проверка структуры данных
+
+```{r}
+hogwarts |> glimpse()
+
+# Changing some variables type to factors
+hogwarts <- hogwarts |> mutate(
+  across(c(house, course, sex, wandCore, bloodStatus), ~ as.factor(.x))
+)
+```
+
+### Поиск пропущенных значений
+
+```{r}
+sum(is.na(hogwarts))
+```
+
+### Сводка по данным
+
+```{r}
+hogwarts |> summary()
+```
+
+### Пересоздание theme_custom
+
+```{r}
+theme_custom <- theme(
+    panel.background = element_rect(fill = "white"),
+    plot.title = element_text(size = 20, hjust = 0.5),
+    plot.subtitle = element_text(size = 15, hjust = 0.5),
+    strip.text = element_text(size = 10),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 15),
+    legend.title = element_text(size = 15),
+    legend.text = element_text(size = 10)
+  )
+
+
+# А еще мы создаем функцию для стандартной ошибки среднего
+se <- function(x){
+  sd(x, na.rm=TRUE)/sqrt(length(x))
+}
+```
+
+## Визуализация
+
+### Распределение 2-х количественных переменных
+
+```{r twoNumVar}
+hogwarts |> 
+  ggplot()+
+  geom_point(aes(x = `Charms exam`, 
+                 y = `Transfiguration exam`))+
+  theme_custom
+```
+
+![](images/ggplot2shapey.png){width="1200"}
+
+```{r scattrerAes}
+scatterStroke <- hogwarts |> 
+  ggplot()+
+  geom_point(aes(x = `Charms exam`, 
+                 y = `Transfiguration exam`),
+             size =3,
+             shape =21,
+             color = "blue",
+             fill = "lightgreen",
+             stroke = 1.5)+ # stroke is the width of the border
+  theme_custom
+
+scatterStroke
+```
+
+### scale_shape_manual()
+
+```{r aesCombo}
+scatterShapeCourse <- hogwarts |> 
+  mutate(course = as.factor(course)) |> 
+  ggplot()+
+  geom_point(aes(x = `Charms exam`, 
+                 y = `Transfiguration exam`,
+                 color = course,
+                 shape = course, 
+             size = 5))+
+  theme_custom +
+  scale_shape_manual(values = c("1" = 49, "2" = 50, "3" = 51, "4" = 52, "5" = 53, "6" = 54, "7" = 55)) +
+  ylim(80, 100)
+
+scatterShapeCourse
+```
+
+### position = position_jitter()
+
+```{r newAes}
+hogwarts |> 
+  mutate(course = as.factor(course)) |> 
+  ggplot()+
+  geom_point(aes(x = `Charms exam`, 
+                 y = `Transfiguration exam`,
+                 size = course),
+             shape = 19,
+             alpha = 0.3,
+             position = position_jitter(width = 2, height = 2))+
+  theme_custom
+```
+
+### geom_smooth() - аппроксимация линии тренда
+
+```{r approxLine}
+scatterStroke +
+  geom_smooth(aes(x = `Charms exam`,
+                  y = `Transfiguration exam`))
+```
+
+Cделать линию тренда прямой: method = "lm"
+
+```{r}
+scatterStroke+
+  geom_smooth(aes(x = `Charms exam`,
+                  y = `Transfiguration exam`),
+              se = FALSE,
+              method = "lm",
+              color = "red")
+```
+
+
+
+```{r multiLine}
+scatterShapeCourse+
+  geom_smooth(aes(x = `Charms exam`,
+                  y = `Transfiguration exam`,
+                  ),
+              se = FALSE,
+              method = "lm")
+```
+
+Место для вашего графика
+
+Постройте диаграмму рассеяния. По осям x и y отложите результат экзаменов по заданным предметам. Примените нужную форму точек, задайте указанные в задании цвет и толщину контура. Разделите точки по цвету по указанному параметру. Проведите линии тренда для градаций фактора, по которому вы раскрасили точки, покрасьте и их тоже. Измените толщину линии на указанную.
+
+```{r}
+lec2Task1 <- read_csv("data2/lec2Task1.csv")
+
+
+hogwarts %>%
+  ggplot() +
+  geom_point(aes(x = `Muggle studies exam`,
+                 y = `Arithmancy exam`,
+                 fill = bloodStatus),
+             color = "gray5",
+             shape = 23) +
+  geom_smooth(aes(x = `Muggle studies exam`,
+                  y = `Arithmancy exam`,
+                  color = bloodStatus),
+              se = FALSE,
+              method = "lm",
+              size = 1.5)
+```
+
+#### Резюме:
+
+1\. Стандартный инструмент для визуализации двух количественных переменных -- диаграмма рассеяния (скаттерплот).
+
+2\. Если необходимо добавить на график еще 1 факторный признак -- выделяем его цветом.
+
+3\. Форма -- не лучшая опция для использования "в соло", но может добавить выразительности в сочетании с цветом.
+
+4\. Отражать изменения размером зачастую тоже не слишком хорошо для восприятия графика.
+
+5\. При большой кучности точек в определенных позициях полезно использовать jitter для случайного перемешивания.
+
+6\. Тренды можно аппроксимировать при помощи `geom_smooth()`
+
+### Комбинируем графики c ggarrange() from ggpurb
+
+```{r arrange}
+
+scatterShapeCourse <- scatterShapeCourse +
+  scale_y_continuous(position = "right")
+
+ggarrange(plotlist = list(scatterStroke, scatterShapeCourse), ncol= 2,
+          heights = c(1, 1)) # heights = c(1, 1) - это отношение высоты графиков
+```
+
+### Столбиковые диаграммы (опять)
+
+Альтернатива `geom_bar()`
+
+```{r anotherBar, fig.height=10, fig.width=16}
+# Строим стандартный барплот
+barDiff1 <- ggplot(hogwarts)+
+  geom_bar(aes(x = house,
+               fill = house))+
+  scale_fill_manual(values = c("Gryffindor" = "#C50000", 
+                             "Hufflepuff" = "#ECB939", 
+                             "Ravenclaw" = "#41A6D9", 
+                             "Slytherin" = "#1F5D25"))+
+  theme_custom
+
+# Создаем новый мини-датафрейм
+houseCountDf <- hogwarts |> 
+  group_by(house) |> 
+  summarise(count = n())
+
+# Строим что-то новое
+colDiff1 <- ggplot(houseCountDf)+
+  geom_col(aes(x = house, 
+               y = count,
+               fill = house))+
+  scale_fill_manual(values = c("Gryffindor" = "#C50000", 
+                             "Hufflepuff" = "#ECB939", 
+                             "Ravenclaw" = "#41A6D9", 
+                             "Slytherin" = "#1F5D25"))+
+  theme_custom
+
+# Сравним
+ggarrange(plotlist = list(barDiff1, colDiff1), ncol = 2)
+```
+Разница между `geom_bar()` и `geom_col()` в том, что geom_bar показывает частоты, а в geom_col можно выбирать ось у.
+`geom_col()` подходит для визуализации агрегированных данных, когда у нас уже есть подсчитанные частоты.
+`geom_bar()` подходит для визуализации частот, когда у нас нет подсчитанных частот.
+
+А если мы хотим визуализировать не количество?
+
+```{r}
+houseResult <- hogwarts |> 
+  group_by(house) |> 
+  summarise(houseTotalPoints = sum(result))
+
+ggplot(houseResult)+
+  geom_col(aes(x= fct_reorder(house,houseTotalPoints, .desc = T),
+               y=houseTotalPoints,
+               fill=house))+
+  scale_fill_manual(values = c("Gryffindor" = "#C50000", 
+                             "Hufflepuff" = "#ECB939", 
+                             "Ravenclaw" = "#41A6D9", 
+                             "Slytherin" = "#1F5D25"))+
+  theme_custom +
+  xlab("House")
+```
+
+```{r}
+houseResult <- hogwarts |> 
+  group_by(house, wandCore) |> 
+  summarise(houseTotalPoints = sum(result)) |>
+  mutate(houseAndWand = paste0(house, " ", wandCore))
+
+
+house_wand_result_plot <- ggplot(houseResult)+
+  geom_col(aes(y = fct_reorder(houseAndWand, houseTotalPoints, .desc = FALSE), 
+               x = houseTotalPoints,
+               fill = house)) +
+  scale_fill_manual(values = c("Gryffindor" = "#C50000", 
+                              "Hufflepuff" = "#ECB939", 
+                              "Ravenclaw" = "#41A6D9", 
+                              "Slytherin" = "#1F5D25"),
+                    labels = c(
+                      "Gryffindor" = "Гриффиндор",
+                      "Hufflepuff" = "Хаффлпафф",
+                      "Ravenclaw" = "Когтевран",
+                      "Slytherin" = "Слизерин"))+
+  theme_custom +
+  labs(title = "Распределение очков факультета\nв зависимости от факультета и волшебной палочки",
+       subtitle = "Учебный год 2023/2024",
+       caption = "Данные предоставлены Институтом биоинформатики",
+       x = "Очки",
+       y = "Факультет и палочка") +
+  scale_x_continuous(breaks = seq(0, 6000, 1000), labels = paste0(seq(0, 6000, 1000), "p.")) +
+  theme(
+    legend.position = "right",       # first the side
+    legend.justification = "bottom"  # then adjust the position
+  )
+
+house_wand_result_plot
+
+# "Распределение очков факультета\nв зависимости от факультета и волшебной палочки" "Учебный год 2023/2024" "Данные предоставлены Институтом биоинформатики" "Очки" "Факультет и палочка" "Факультет"
+# Сохраним график
+# house_wand_result_plot
+#ggsave("images/house_wand_result_plot.png", house_wand_result_plot, width = 20, height = 16, units = "in", dpi = 300)
+```
+
+Место для вашего графика
+
+Подсчитайте сумму очков за указанную неделю у представителей указанных категорий (стоит их скомбинировать как в примере выше). Раскрасьте столбики по отмеченной категории. Отсортируйте столбики (самый высокий/широкий столбик -- слева или сверху графика). Добавьте название графика. Сделайте отсечки на числовой оси с интервалом, в соответствии с данными таблицы.
+
+```{r}
+read_csv("data2/lec2Task2.csv")
+```
+```{r}
+bloodHouse<- hogwarts |> 
+  group_by(bloodStatus, house) |> 
+  summarise(houseTotalPoints36 = sum(week_36)) |>
+  mutate(houseAndBlood = paste0(house, " ", bloodStatus))
+
+
+ggplot(bloodHouse)+
+  geom_col(aes(y = fct_reorder(houseAndBlood, houseTotalPoints36, .desc = FALSE), 
+               x = houseTotalPoints36,
+               fill = house)) +
+  scale_fill_manual(values = c("Gryffindor" = "#C50000", 
+                              "Hufflepuff" = "#ECB939", 
+                              "Ravenclaw" = "#41A6D9", 
+                              "Slytherin" = "#1F5D25"),
+                    labels = c(
+                      "Gryffindor" = "Гриффиндор",
+                      "Hufflepuff" = "Хаффлпафф",
+                      "Ravenclaw" = "Когтевран",
+                      "Slytherin" = "Слизерин")) +
+  scale_x_continuous(breaks = seq(0, 300, 20), labels = paste0(seq(0, 300, 20), "p."))
+```
+
+
+
+
+#### Резюме.
+
+1\. Если у нас есть вычисленные заранее агрегированные статистики, используем `geom_col`. Если хотим быстро и без дополнительных манипуляций визуализировать частоты -- `geom_bar`.
+
+2\. Функция `labs` -- это еще один способ переименовать оси. Также с помощью нее можно добавить название, подзаголовок и подпись.
+
+3\. Если надписи по оси x перекрывают друг друга, можно наклонить их под определенным углом или развернуть оси. Будьте осторожны при использовании `coord_flip` -- в этом случае все настройки должны быть для оси с противоположным названием.
+
+4\. При помощи семейства функций `scale` можно указывать количество отсечек и именовать их по своему вкусу.
+
+5\. Сохранить графики на устройство с заданными параметрами можно при помощи функции `ggsave()`
+
+### Текстовые метки geom_text()
+
+`hjust` и `vjust` -- это параметры, которые отвечают за горизонтальное и вертикальное выравнивание текста. 
+Отрицательные значения отдаляют от конца бара во вне, положительные -- угулбляют к концу бара.
+
+
+```{r}
+house_wand_result_plot +
+  geom_text(aes(y = fct_reorder(houseAndWand, houseTotalPoints, .desc = FALSE), 
+            x = houseTotalPoints,
+            label = houseTotalPoints),
+            size = 7,
+            hjust = -1) + #distiance from the edge of bar
+  xlim(0, 10000) # расширяем  ось чтобы вместить надписи
+
+# + scale_x_continuous(breaks = seq(0, 300, 20), labels = paste0(seq(0, 300, 20), "p."), limits = c(0, 10000)) #или расширить ось х внутри scale_x_continuous чтобы оставить все форматирование оси
+```
+
+### Вредные советы
+
+Посмотрим на другое представление данных по факультетам.
+
+```{r}
+houseCountDf <- hogwarts |> 
+  group_by(house) |> 
+  summarise(count = n())
+
+barTestPlot <- ggplot(hogwarts)+
+  geom_bar(aes(x = fct_infreq(house), 
+               fill = house))+
+  scale_fill_manual(values = c("Gryffindor" = "#C50000", 
+                           "Hufflepuff" = "#ECB939", 
+                           "Ravenclaw" = "#41A6D9", 
+                           "Slytherin" = "#1F5D25"))+
+  theme_custom
+
+ggplot(houseCountDf)+
+  geom_col()+
+  scale_fill_manual(values = c("Gryffindor" = "#C50000", 
+                             "Hufflepuff" = "#ECB939", 
+                             "Ravenclaw" = "#41A6D9", 
+                             "Slytherin" = "#1F5D25"))+
+  theme_custom
+
+# Сравним графики
+ggarrange(plotlist = list(, barTestPlot), ncol = 2)
+```
+
+Попробуем взять средние.
+
+```{r}
+housePotionsExam <- hogwarts |> 
+  group_by(house) |> 
+  summarise(meanPotionsExam = mean(`Potions exam`))
+
+ggplot(housePotionsExam)+
+  geom_col(aes(x = house, 
+               y = meanPotionsExam,
+               fill = house))+
+  scale_fill_manual(values = c("Gryffindor" = "#C50000", 
+                             "Hufflepuff" = "#ECB939", 
+                             "Ravenclaw" = "#41A6D9", 
+                             "Slytherin" = "#1F5D25"))+
+  theme_custom
+```
+
+### Отображение интервалов
+
+```{r}
+housePotionsExam <- hogwarts |> 
+  group_by(house) |> 
+  summarise(meanPotionsExam = mean(`Potions exam`) |> round(2),
+            ci95Min = (min(`Potions exam`) |> round(2)),
+            ci95Max = (max(`Potions exam`) |> round(2)))
+
+ggplot(housePotionsExam)+
+  theme_custom
+```
+
+Место для вашего графика
+
+Визуализируйте среднее и доверительный интервал по указанному фактору для суммы баллов на указанной неделе обучения при помощи сочетания `geom_point()` и `geom_errorbar()`. При возникновении ошибки в слое `geom_errorbar()` попробуйте обратиться к справке и посмотрите, какие эстетики он принимает. Покрасьте эррорбары в указанный цвет. Отсортируйте эррорбары в указанном порядке (столбец `order`). Задайте отображение по оси ординат от -50 до 50. Скомбинируйте этот и предыдущий график на одном изображении, разместив изображения "по столбцам".
+
+```{r}
+read_csv("data/lec2Task3.csv")
+```
+
+#### Резюме.
+
+1\. Отображать пропорции пайчартом (круговой диаграммой) часто бывает не лучшей идеей. Для этих целей больше подходит отсортированный барплот: сравнивать соседние высоты проще, чем градус секторов.
+
+2\. Другая плохая идея -- отображать средние значения барплотами. В этом случае весь столбик теряет свой физический смысл -- нагрузку несет только его верхний край.
+
+3\. Альтернатива в подобном случае -- эрробары или поинтрэнджи. С ними важно помнить о том, чтобы указать, что есть точка, а что -- интервал.
+
+4\. Хорошая идея -- подписать важные числа на графике. Например, для барплотов с этой функцией хорошо справляется `geom_text()`.
+
+### Функции и конвееры
+
+![](images/vysocki.png)
+
+Попробуем создать относительно универсальную функцию для создания гистограмм
+
+```{r}
+histCustom <- function(df, x){
+  customPlot <- ggplot(df)+
+    geom_histogram(aes(x = x),
+                   color="black",
+                   fill = "aquamarine2",
+                   bins = 20)+
+    labs(title = "Histogram",
+         caption = "No source of data",
+         y = "Number of objects")+
+    theme_custom
+  
+  return(customPlot)
+}
+
+histCustom(hogwarts, result)
+```
+
+Дубль 2
+
+```{r}
+histCustom <- function(df, ){
+  customPlot <- ggplot(df)+
+    geom_histogram(,
+                   color="black",
+                   fill = "aquamarine2",
+                   bins = 20)+
+    labs(title = "Histogram",
+         caption = "No source of data",
+         y = "Number of objects")+
+    theme_custom
+  
+  return(customPlot)
+}
+
+histCustom(hogwarts, )
+```
+
+Дубль 3
+
+```{r}
+histCustom <- function(df, x){
+  customPlot <- ggplot(df)+
+    geom_histogram(aes(),
+                   color="black",
+                   fill = "aquamarine2",
+                   bins = 20)+
+    labs(title = "Histogram",
+         caption = "No source of data",
+         x = x,
+         y = "Number of objects")+
+    theme_custom
+  
+  return(customPlot)
+}
+
+histCustom(hogwarts, )
+```
+
+Дубль 4
+
+```{r}
+histCustom <- function(df, x){
+  customPlot <- ggplot(df)+
+    geom_histogram(aes(x = ),
+                   color="black",
+                   fill = "aquamarine2",
+                   bins = 20)+
+    labs(title = "Histogram",
+         caption = "No source of data",
+         y = "Number of objects")+
+    theme_custom
+  
+  return(customPlot)
+}
+
+histCustom(hogwarts, result)
+```
+
+Применим функцию к одному из слоев.
+
+```{r fig.height=40, fig.width=40}
+
+# График-подложка
+plotTemplate <- ggplot(hogwarts)+
+  labs(title = "Histogram",
+         caption = "No source of data",
+         y = "Number of objects")+
+    theme_custom
+
+# Функция для подбора числа бинов
+histBinCustom
+
+# Создание конвеера
+binNumbers <- c(3, 5, seq(10, 20, 2), seq(25, 100, 5), seq(100, 500, 100))
+
+# Вывод итогового графика
+```
+
+#### Резюме.
+
+1\. Если требуются однотипные графики, в которых изменяется малое число эстетик, можно сделать функцию с графиком ggplot внутри.
+
+2\. Оборачивание переменной внутри функции в curly-curly (`{{}}`) позволяет передавать в качестве этой переменной столбец датафрейма.
+
+3\. Для создания конвееров удобно сочетать самодельные функции с графиками и конвеерные функции из пакета `purrr`.
+
+4\. При создании самодельной функции с использованием одной функции ggplot, аргументам по умолчанию можно задать значение в скобках после слова `function`.
+
+5\. Хорошая практика -- добавлять `...` в список возможных аргументов функции.
+
+![](images/Nicholas_I.jpg)
+
+Ссылочная
+
+-   [Сайт с примерами графиков и полезными советами](https://r-graph-gallery.com/)
+-   [Оригинальная статья с изложением философии ggplot](https://byrneslab.net/classes/biol607/readings/wickham_layered-grammar.pdf)
+-   [Документация ggplot](https://ggplot2.tidyverse.org/)
+-   [Учебник по data-science от авторов ggplot](https://r4ds.hadley.nz/)
+-   [Книга о некоторых принципах визуализации с полезными советами, но без явного отображения кода](https://clauswilke.com/dataviz/)
+-   [Учебник по ggplot от авторов ggplot (в процессе написания)](https://ggplot2-book.org/)
+-   [Телеграм-канал про визуализацию (не в биомедицине, и не на R, но от этого не менее хороший)](https://t.me/nastengraph)
+-   [Шпаргалка по ggplot2](https://rstudio.github.io/cheatsheets/html/data-visualization.html)
+-   [Шпаргалка по rmd](https://posit.co/wp-content/uploads/2022/10/rmarkdown-1.pdf)
