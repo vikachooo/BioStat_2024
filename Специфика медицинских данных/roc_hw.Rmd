@@ -1,0 +1,134 @@
+---
+title: "ROC analysis"
+author: "Victoria Zaitceva"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstatix)
+library(pROC)
+library(gtsummary)
+
+set.seed(42)
+```
+
+```{r}
+library(readxl)
+trauma <- read_excel("Специфика медицинских данных/trauma.xlsx")
+```
+
+• id – номер пациента в списке
+• Name – имя фамилия пациента
+• Sex – пол пациента
+• Age – возраст пациента (лет)
+• Height – рост пациента (дюймы1)
+• Weight – масса тела пациента (фунты2)
+• SBP – систолическое артериальное давление при поступлении (мм рт.ст.)
+• DBP – диастолическое артериальное давление при поступлении (мм рт.ст.)
+• FOUR – балл по шкале комы FOUR при поступлении
+• GSC – балл по шкале комы Глазго при поступлении
+• Hb – уровень гемоглобина при поступлении (г/дл)
+• Death – летальный исход в течение 24 часов (1 – наступил, 0 – нет)
+
+## 1
+
+Дайте описательную статистику для переменных, включённых в датасет. Дополнительно
+рассчитайте, у какого количества пациентов и в каком проценте случаев у пациентов был
+снижен уровень гемоглобина? Используйте следующие референтные значения (Мужчины:
+13.5–16 г/дл, Женщины: 12–14 г/дл).
+
+```{r}
+
+trauma <- trauma %>%
+  mutate(Height = str_replace(Height, "\"", "") %>% as.numeric()б
+         Height = Height * 2.54, # из дюймов в см
+         Weight = Weight * 0.453592) # из фунтов в кг
+
+# факторы
+trauma <- trauma %>%
+  mutate(across(c(Sex, Death), ~ as.factor(.x)))
+
+trauma %>%
+  select(-id, -Name) %>%
+  summary()
+```
+
+
+
+```{r}
+trauma <- trauma %>%
+  mutate(Hb_low = case_when(
+    Sex == "Мale" & Hb < 13.5 ~ 1,
+    Sex == "Female" & Hb < 12 ~ 1,
+    TRUE ~ 0
+  ),
+  Hb_low = as.factor(Hb_low)
+  )
+
+table(trauma$Hb_low)
+prop.table(table(trauma$Hb_low)) %>% round(2)
+```
+## 2
+
+Рассчитайте индекс массы тела у пациентов (кг / м2). Каков был средний (M (SD)) уровень
+ИМТ у пациентов, включённых в исследование? Какая доля пациентов имела ожирение (ИМТ > 30)?
+
+```{r}
+trauma <- trauma %>%
+  mutate(BMI = Weight / ((Height/100)^2))
+
+
+mean_sd <- trauma %>% 
+  summarise(Mean = mean(BMI, na.rm = TRUE) %>% round(2),
+            SD = sd(BMI, na.rm = TRUE) %>% round(2)) 
+
+mean_sd$Mean
+mean_sd$SD
+
+cat("Средний ИМТ:", mean_sd$Mean,
+            "\nCо стандартным отклонением:", mean_sd$SD,
+            "\nДоля пациентов с ожирением:", 
+            prop.table(table(trauma$BMI > 30))[2] %>% round(2) * 100, "%")
+
+
+```
+
+## 3
+
+Как выглядит ROC-кривая для предсказания летального исхода в течение 24 часов по
+переменной, характеризующей уровень гемоглобина? Постройте график. Чем может быть
+обусловлена такая форма кривой?
+
+
+```{r}
+roc_curve_1 <- roc(Death ~ Hb, 
+                   data = trauma)
+
+roc_curve_1
+```
+
+```{r}
+roc_curve_1 %>% 
+    ggroc() + 
+    theme_bw() +
+    labs(title = "ROC-кривая для предсказания летального исхода в течение 24 часов по уровню гемоглобина",
+         x = "1 - специфичность",
+         y = "Чувствительность") +
+  theme(title = element_text(size = 9))
+
+```
+
+
+
+
+
+
+
+
+
+
+
