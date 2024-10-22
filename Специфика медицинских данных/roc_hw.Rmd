@@ -6,7 +6,7 @@ output: word_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, error = FALSE, warning = FALSE, message = FALSE)
 
 library(tidyverse)
 library(rstatix)
@@ -14,11 +14,12 @@ library(pROC)
 library(gtsummary)
 
 set.seed(42)
+getwd()
 ```
 
 ```{r}
 library(readxl)
-trauma <- read_excel("Специфика медицинских данных/trauma.xlsx")
+trauma <- read_excel("trauma.xlsx")
 ```
 
 • id – номер пациента в списке
@@ -34,7 +35,7 @@ trauma <- read_excel("Специфика медицинских данных/tra
 • Hb – уровень гемоглобина при поступлении (г/дл)
 • Death – летальный исход в течение 24 часов (1 – наступил, 0 – нет)
 
-## 1
+# 1
 
 Дайте описательную статистику для переменных, включённых в датасет. Дополнительно
 рассчитайте, у какого количества пациентов и в каком проценте случаев у пациентов был
@@ -44,7 +45,7 @@ trauma <- read_excel("Специфика медицинских данных/tra
 ```{r}
 
 trauma <- trauma %>%
-  mutate(Height = str_replace(Height, "\"", "") %>% as.numeric()б
+  mutate(Height = str_replace(Height, "\"", "") %>% as.numeric(),
          Height = Height * 2.54, # из дюймов в см
          Weight = Weight * 0.453592) # из фунтов в кг
 
@@ -72,22 +73,22 @@ trauma <- trauma %>%
 table(trauma$Hb_low)
 prop.table(table(trauma$Hb_low)) %>% round(2)
 ```
-## 2
+Гемоглобин снижен у 23% пациентов.
+
+# 2
 
 Рассчитайте индекс массы тела у пациентов (кг / м2). Каков был средний (M (SD)) уровень
 ИМТ у пациентов, включённых в исследование? Какая доля пациентов имела ожирение (ИМТ > 30)?
 
 ```{r}
 trauma <- trauma %>%
-  mutate(BMI = Weight / ((Height/100)^2))
+  mutate(BMI = Weight / ((Height/100)^2)) # из см в м
 
 
 mean_sd <- trauma %>% 
   summarise(Mean = mean(BMI, na.rm = TRUE) %>% round(2),
             SD = sd(BMI, na.rm = TRUE) %>% round(2)) 
 
-mean_sd$Mean
-mean_sd$SD
 
 cat("Средний ИМТ:", mean_sd$Mean,
             "\nCо стандартным отклонением:", mean_sd$SD,
@@ -97,30 +98,142 @@ cat("Средний ИМТ:", mean_sd$Mean,
 
 ```
 
-## 3
+# 3,4
 
 Как выглядит ROC-кривая для предсказания летального исхода в течение 24 часов по
 переменной, характеризующей уровень гемоглобина? Постройте график. Чем может быть
 обусловлена такая форма кривой?
 
+Чему равна площадь под ROC-кривой, которую вы построили в вопросе 3? Чему равен 95%
+двусторонний ДИ для площади под ROC-кривой, которую вы построили в вопросе 3?
+
 
 ```{r}
-roc_curve_1 <- roc(Death ~ Hb, 
-                   data = trauma)
+par(pty = "s")
+roc_curve1 <- roc(Death ~ Hb, data = trauma, plot = TRUE, 
+                  print.auc = TRUE,
+                  print.auc.cex = 0.65,
+    legacy.axes = TRUE, # to make it 1 - specificity
+    percent = TRUE, 
+    ci = TRUE,
+    xlab = "False positive percentage (fpp)",
+    ylab = "True positive percentage (tpp)",
+    col = "darkgreen",
+    lwd = 4 # line width
+    )
 
-roc_curve_1
+roc_curve1
 ```
+
+AUC = 0.7 
+Наша модель предсказывание летального исхода в течение 24 часов по уровню гемоглобина имеют среднюю точность - 70% случаев смерти могли быть предсказаны по уровню гемоглобина. 
+
+
+# 5
+
+Проведите ROC-анализ и определите, какое пороговое значение является оптимальным для
+предсказания летального исхода в течение 24 часов по шкале комы Глазго. Какой
+чувствительностью и специфичностью обладает данный порог?
+
 
 ```{r}
-roc_curve_1 %>% 
-    ggroc() + 
-    theme_bw() +
-    labs(title = "ROC-кривая для предсказания летального исхода в течение 24 часов по уровню гемоглобина",
-         x = "1 - специфичность",
-         y = "Чувствительность") +
-  theme(title = element_text(size = 9))
+par(pty = "s")
+roc_curve2 <- roc(Death ~ GSC, data = trauma, plot = TRUE, 
+                  print.auc = TRUE,
+                  print.auc.cex = 0.65,
+    legacy.axes = TRUE, # to make it 1 - specificity
+    percent = TRUE, 
+    ci = TRUE,
+    xlab = "False positive percentage (fpp)",
+    ylab = "True positive percentage (tpp)",
+    col = "blue",
+    lwd = 4 # line width
+    )
 
+roc_curve2
 ```
+
+
+```{r}
+roc.df <- data.frame(
+  threshold = roc_curve2$thresholds,
+  tpp = roc_curve2$sensitivities,
+  fpp = 1 - roc_curve2$specificities,
+  specificity = roc_curve2$specificities
+)
+
+head(roc.df, 3)
+tail(roc.df, 3)
+```
+Верхний правый угол: когда оба Sensitivity (TPP) и 1 - specificity (FPP) равны 100% (т.е. специфичность равна 100%). Все пациенты с летальным исходом предсказаны правильно, но все пациенты без летального исхода предсказаны неправильно. 
+Порог +бесконечность (бесконечно высокий балл по шкале комы Глазго)
+
+Нижний левый угол: когда оба Sensitivity (TPP) и 1 - specificity (FPP) равны 0% (т.е. специфичность равна 0%). Никакой классификации не происходит.  
+Порог -бесконечность (бесконечно низкий балл по шкале комы Глазго)
+
+Если мы хотим найти оптимальный порог, то нам нужно найти точку, где TPP максимально, а FPP минимально. Например, мы хотим, чтобы TPP было больше 60%, а FPP меньше 80%:
+
+```{r}
+roc.df[roc.df$tpp > 60 & roc.df$fpp < 80, ]
+```
+
+
+```{r}
+roc_curve2 %>% coords(x = "best", best.method = "closest.topleft")
+```
+Таким образом, оптимальный порог для предсказания летального исхода в течение 24 часов по шкале комы Глазго равен 14.5 балла. При данном пороге чувствительность составляет 85.5%, а специфичность - 80.8%.
+
+# 6
+
+Какая из количественных переменных в датасете (включая рассчитанный вами ранее ИМТ)
+обладает наибольшей площадью под ROC-кривой? Как вы можете интерпретировать это
+знание? Какая количественная переменная имеет наименьшую площадь?
+
+```{r}
+
+all_rocs <- trauma %>% 
+  select(-id) %>%
+  select(Death, where(is.numeric)) %>%
+  pivot_longer(cols = !Death) %>% 
+    
+    group_by(name) %>% 
+    
+    summarise(AUC = roc(Death, value, ci = T)$ci[2] %>% round(3),
+              AUC_LCL = roc(Death, value, ci = T)$ci[1] %>% round(3), #lower confidence limit
+              AUC_UCL = roc(Death, value, ci = T)$ci[3] %>% round(3)) #upper confidence limit
+
+all_rocs
+```
+
+
+
+```{r}
+cat("Наибольшей площадью под ROC-кривой обладает переменная:", 
+    all_rocs %>%
+    filter(AUC == max(AUC)) %>%
+    pull(name),
+    "\nAUC =",
+    all_rocs %>% 
+      filter(AUC == max(AUC)) %>% pull(AUC)
+)
+```
+Таким образом, балл по шкале комы FOUR при поступлении имеет наибольшей предиктивной способностью (93% случаев будут предсказаны верно).
+
+
+```{r}
+
+cat("Нулевой предсказательной мощностью обладают переменные:", 
+    all_rocs %>%
+  filter(AUC_LCL <= 0.5 & AUC_UCL >= 0.5) %>%
+  pull(name)
+)
+```
+
+
+
+
+
+
 
 
 
