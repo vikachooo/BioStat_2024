@@ -1,0 +1,321 @@
+---
+title: "Correlations_practice"
+output: html_document
+date: '`r Sys.Date()`'
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readxl)
+library(tidyverse)
+library(GGally)
+library(Hmisc)
+
+```
+
+# Загрузим датасет pima
+
+```{r}
+getwd()
+pima <- readxl::read_xlsx("data/pima.xlsx")
+
+```
+
+Посмотрим на датасет
+
+```{r}
+
+pima %>% 
+    summary()
+
+```
+
+Что нас смущает?
+нули в минимумах
+Давайте это исправим 
+
+```{r}
+
+pima_corrected <- pima %>% 
+    # вставьте здесь свой код для исправления данных
+mutate(
+  across(glucose:mass, 
+         ~ na_if(.x, 0))
+)
+# better this was than filtering bacause filtering will remove more data than we want
+```
+
+Проверим наши данные ещё раз
+
+```{r}
+
+pima_corrected %>% 
+    summary()
+
+```
+
+# Попробуем посчитать корреляции
+
+
+Для начала давайте оценим корреляцию между pressure и age
+
+Сначала построим график:
+
+```{r, fig.height=3, fig.width=3}
+
+pima_corrected %>% 
+    ggplot(aes(x = age, y = pressure)) + 
+    geom_point(size = 1.1) + 
+    
+    # Добавим красивые подписи осей
+    labs(x = "Возраст, лет", 
+         y = "Диаст. артериальное давление, мм рт.ст.") + 
+    
+    # Поменяем оформление графика
+    theme_bw()
+
+```
+
+Имеет ли смысл здесь искать линейную корреляцию? Скорее нет. Поэтому давайте воспользуемся корреляцией Спирмена.
+
+Рассчитаем коэффициент корреляции Спирмена:
+
+```{r}
+
+cor.test(pima_corrected$pressure,
+         pima_corrected$age,
+         method = "spearman")
+
+```
+
+Проделайте аналогичный анализ для переменных mass и pressure:
+
+1. Постройте диаграмму рассеяния 
+
+```{r, fig.height=2, fig.width=2}
+
+pima_corrected %>% 
+    ggplot(aes(x = mass, y = pressure)) + 
+    geom_point(size = 1.1) + 
+    theme_bw()
+
+```
+Здесь уже можно предположить, что корреляция будет линейной. Проверим это:
+
+2. Рассчитайте коэффициент корреляции методом Пирсона (дефолт)
+
+```{r}
+
+cor.test(pima_corrected$mass,
+         pima_corrected$pressure)
+
+```
+
+Давайте также проанализируем корреляцию между insulin и pregnant:
+
+1. Построим диаграмму
+
+```{r, fig.height=3, fig.width=3}
+
+pima_corrected %>% 
+    ggplot(aes(x = pregnant, y = insulin)) + 
+    geom_point(size = 1.1) + 
+    theme_bw()
+
+```
+
+2. Сделаем анализ
+
+```{r}
+
+cor.test(pima_corrected$pregnant,
+         pima_corrected$insulin,
+         method = "spearman")
+
+``` 
+
+3. Сделаем красиво
+
+```{r, fig.height=3, fig.width=3}
+
+pima_corrected %>% 
+    ggplot(aes(x = mass, y = triceps)) + 
+    geom_point(size = 1.1)  + 
+    
+    # Добавим красивые подписи осей
+    labs(x = "ИМТ", 
+         y = "Толщина кожной складки на трицепсе, мм") + 
+    
+    # Добавим на график значения R и p 
+    
+    geom_text(x = 50, 
+              y = 25,
+              label = "R = 0.65,\np < 0.001",
+              hjust = 0,
+              vjust = 1) + 
+    
+    # Добавим линию регрессии
+    
+    geom_smooth(method = "lm") +
+    
+    # Поменяем оформление графика
+    theme_bw()
+
+```
+
+
+# Как выброс может испортить всю картину?
+
+Данные без выброса
+
+```{r, fig.height=4, fig.width=4}
+
+# стандартизуем случайность
+set.seed(42)
+
+
+# генерируем данные
+data_1 <- tibble(
+    X = rnorm(25),
+    Y = rnorm(25)
+)
+
+# строим график
+data_1 %>% 
+    ggplot(aes(X, Y)) + 
+    geom_point() + 
+    theme_bw()
+
+```
+
+```{r}
+
+# считаем корреляции
+cor.test(data_1$X, data_1$Y)
+cor.test(data_1$X, data_1$Y, method = "spearman")
+
+```
+
+Данные с выбросом
+
+```{r, fig.height=4, fig.width=4}
+
+# добавляем 1 выброс
+data_2 <- data_1 %>% 
+    bind_rows(
+        tibble(X = 7, Y = 5)
+    )
+
+data_2 %>% 
+    ggplot(aes(X, Y)) + 
+    geom_point() + 
+    theme_bw()
+
+```
+
+
+```{r}
+
+cor.test(data_2$X, data_2$Y)
+cor.test(data_2$X, data_2$Y, method = "spearman")
+
+```
+
+Каков вывод?
+
+Если есть выбросы, то корреляция Пирсона может быть сильно искажена. В таких случаях лучше использовать корреляцию Спирмена - результат будет более устойчивым к выбросам.
+
+Хотя если выбросы - это не ошибка, а реальные данные, и мы все равно хотим их учитывать, то возможно лучше использовать корреляцию Пирсона.
+
+Корреляция Пирсона лучше работает на малых данных. 
+
+
+# Как ещё можно обработать данные?
+
+Задача - посмотреть, как уровень glucose ассоциирован с mass, age, triceps
+
+Вариант № 1 - делать вручную, как мы делали выше
+
+Вариант № 2 - воспользоваться магией tidyverse
+
+```{r}
+
+pima_corrected %>% 
+    
+    # Выберем переменные для анализа
+    dplyr::select(glucose, mass, age, triceps) %>% 
+    
+    # Переведём наши данные в длинный формат
+    pivot_longer(!glucose) %>% 
+    
+    # Сгрупируем переменные по имени
+    group_by(name) %>% 
+    
+    # Рассчитаем значения р и R
+    dplyr::summarise(
+        R = cor.test(glucose, value, method = "spearman")$estimate,
+        p = cor.test(glucose, value, method = "spearman")$p.value
+    ) %>% 
+    
+    ungroup() %>% 
+    mutate(p.adj = p.adjust(p, method = "holm"))
+
+```
+
+
+Попробуйте таким же способом рассчитать как уровень glucose ассоциирован с insulin, pressure и pregnant
+
+```{r}
+
+    
+```
+
+
+Вариант №3 - когда надо совсем быстро:
+
+Построение корреляционных матриц:
+
+```{r}
+
+rcorr(as.matrix(pima_corrected[1:8]),
+      type = "spearman")
+
+```
+
+Красивые графики:
+
+```{r}
+
+beatutiful_plot <- ggpairs(pima_corrected[1:4])
+
+print(beatutiful_plot, progress = F)
+
+```
+
+# Графики для "накладывающихся" точек
+
+```{r, fig.height=3.5, fig.width=3.5, dpi = 150}
+
+data_grades <- readxl::read_xlsx("Grades.xlsx")
+
+data_grades %>% 
+    ggplot(aes(x = Grade_A, y = Grade_B)) + 
+    geom_point(size = 2) + 
+    theme_bw()
+
+```
+
+```{r, fig.height=3.5, fig.width=4.1}
+
+data_grades %>% 
+    ggplot(aes(x = Grade_A, y = Grade_B)) + 
+    geom_count() + 
+    theme_bw()
+
+cor.test(data_grades$Grade_A, data_grades$Grade_B, method = "spearman")
+
+```
+
+

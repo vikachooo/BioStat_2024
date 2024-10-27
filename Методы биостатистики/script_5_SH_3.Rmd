@@ -1,0 +1,177 @@
+---
+title: "Statistical hypothesis testing (part 3)"
+author: "Evgeny Bakin"
+date: '2024-10-19'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+## Эксперимент №1: Статистика критерия и p-значения
+
+```{r exp_2, echo=FALSE, fig.height=3, fig.width=6}
+
+num_centers <- 1000 # Сколько раз повторим эксперимент?
+
+sample_size <- 300 # Количество пациентов, прошедших, терапию
+True_Hg_improve <- 0 # Истинное среднее изменение гемоглобина
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rnorm(sample_size*num_centers, mean = True_Hg_improve, sd = Hg_sd)
+)
+
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  dplyr::summarise(t = sqrt(sample_size)*mean(Hg_change)/sd(Hg_change)) %>% 
+  ungroup()
+
+# Как распределено t, когда Н0 верна?
+plt_1 <- ggplot(trial_results, aes(x = t)) +
+  geom_histogram(aes(y =..density..),
+                 color = 'black', fill = 'grey') +
+  stat_function(fun = dt, 
+                args = list(df = sample_size-1), color = 'darkgreen') +
+  geom_vline(mapping = aes(xintercept = qt(0.975, sample_size-1)), color = "red") +
+  geom_vline(mapping = aes(xintercept = qt(0.025, sample_size-1)), color = "red") +
+  xlim(c(-5,5)) +
+  theme_bw()
+
+plt_1
+
+```
+
+# Провели эксперимент: 
+Смотрим только на правый хвост распределения t-статистики. 
+
+```{r new_exp}
+
+new_sample <- rnorm(sample_size, mean = 0.5, sd = Hg_sd)
+new_t <- abs(sqrt(sample_size)*mean(new_sample)/sd(new_sample))
+
+ggplot() +
+  stat_function(fun = dt, 
+                args = list(df = sample_size-1), 
+                fill = 'lightgreen',
+                xlim = c(new_t,5),
+                geom = "area") +
+  geom_vline(aes(xintercept = qt(0.975, sample_size - 1))) +
+  stat_function(fun = dt, 
+                args = list(df = sample_size-1), 
+                color = 'darkgreen', 
+                size = 3,
+                xlim = c(0, 5)) +
+    geom_point(aes(x = new_t, y = 0), color = "red") +
+  geom_text(aes(x = 4, y = 0.35, label = paste0("t = ", signif(new_t,2)," , p = ", signif(2*(1-pt(new_t, sample_size - 1)),2))), size = 4)+
+  theme_bw()
+
+
+```
+Толстая зеленая линия - ожидаемое распределение t-статистики при верности нулевой гипотезы. 
+Линия порога - критическое значение t-статистики, при котором мы отвергаем нулевую гипотезу.
+Красная точка - значение t-статистики, полученное в эксперименте.
+
+Зеленая площаль - площадь от полученного значения t-статистики до бесконечности (в случае правого хвоста - до плюс бесконечности). Это p-значение.
+
+Эта площадь - мера согласия с нулевой гипотезой. Если оно большое (близко к 1), то мы сильно согласны с нулевой гипотезой. Если оно маленькое (близко к 0), то мы мало согласны с нулевой гипотезой.
+
+При условии, что нулевая гипотеза верна, у р-значения равномерное распределение на отрезке [0,1].
+
+Распределение р-значения 
+
+
+## Как распределено p-значение при верности нулевой гипотезы?
+
+```{r exp_2, echo=FALSE, fig.height=3, fig.width=6}
+
+num_centers <- 1000 # Сколько раз повторим эксперимент?
+
+sample_size <- 30 # Количество пациентов, прошедших, терапию
+True_Hg_improve <- 0 # Истинное среднее изменение гемоглобина
+
+# потом будет менять (в любую сторону от нуля) True_Hg_improve и смотреть, что будет с p-значениями - распределение будет смещаться влево
+
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+df_trial_norm <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rnorm(sample_size*num_centers, mean = True_Hg_improve, sd = Hg_sd)
+)
+
+trial_results <- df_trial_norm %>% 
+  group_by(center_ID) %>% 
+  do(broom::tidy(t.test(Hg_change ~ 1, conf.level = 0.95, mu = 0, data = .))) %>% 
+  ungroup()
+
+# Как распределено t, когда Н0 верна?
+ggplot(trial_results, aes(x = p.value)) +
+  geom_histogram(aes(y =..density..),
+                 color = 'black', fill = 'grey',
+                 breaks = seq(0,1,0.05)) +
+  stat_function(fun = dunif, 
+                args = list(min = 0, max = 1), color = 'darkgreen') +
+  geom_vline(mapping = aes(xintercept = 0.05), color = "red") +
+  xlim(c(-0.1,1.1)) +
+  theme_bw()
+
+# Попробуйте провести эксперимент с "работающим" препаратом. Что будет происходить с p-значениями?
+
+```
+
+
+Мы увеличиваем истинную разницу и нулевая гипотеза становится неверной. При этом распределение p-значения становится НЕравномерным и смещенным влево - в сторону малых значений - и мы чаще отвергаем нулевую гипотезу.
+
+
+## Как распределено p-значение при верности нулевой гипотезы для экспоненциального распределения?
+
+```{r exp_2, echo=FALSE, fig.height=3, fig.width=6}
+
+num_centers <- 1000 # Сколько раз повторим эксперимент?
+
+sample_size <- 30 # Количество пациентов, прошедших, терапию
+True_avg_duration <- 20 # Истинное среднее время до выздоровления
+
+df_trial_norm <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rexp(sample_size*num_centers, rate = 1/True_avg_duration)
+)
+
+trial_results <- df_trial_norm %>% 
+  group_by(center_ID) %>% 
+  do(broom::tidy(t.test(Hg_change ~ 1, conf.level = 0.95, mu = True_avg_duration, data = .))) %>% 
+  ungroup()
+
+# Как распределено t, когда Н0 верна?
+ggplot(trial_results, aes(x = p.value)) +
+  geom_histogram(aes(y =..density..),
+                 color = 'black', fill = 'grey',
+                 breaks = seq(0,1,0.05)) +
+  stat_function(fun = dunif, 
+                args = list(min = 0, max = 1), color = 'darkgreen') +
+  geom_vline(mapping = aes(xintercept = 0.05), color = "red") +
+  xlim(c(-0.1,1.1)) +
+  theme_bw()
+
+
+```
+
+Здесь экспоненциальное распределение. При верности нулевой гипотезы p-значение равномерно распределено на отрезке [0,1], но не так "идеально" равномерно, как когда мы имеем дело с примерно нормальным распределением статистики.
+
+При малых объемах выборки p-значение не равномерно распределено на отрезке [0,1]. Оно смещено влево и чаще принимает малые значения. Поэтому при малых объемах выборки мы чаще отвергаем нулевую гипотезу, чем при больших объемах выборки (чаще совершаем ошибку 1 рода).
+
+При увелечении объема выборки p-значение становится более равномерным - начинает работать центральная предельная теорема.
+
+
+
+
+
+Чем больше модуль статистики, тем меньше р значение.

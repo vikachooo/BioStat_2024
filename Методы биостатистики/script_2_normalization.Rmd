@@ -1,0 +1,315 @@
+---
+title: "Estimation of mean and SE"
+author: "Evgeny Bakin"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+# 1. Исследование уровня лейкоцитов после ТГСК
+
+## 1.1 Модель пациента
+
+```{r HSCT, echo=FALSE, fig.width=4, fig.height=3}
+
+values <- 0:1 # Значения, которые могут принимать лейкоциты (случайная величина)
+Pr <- 1/2  # Распределение в генеральной совокупности
+
+df <- data.frame(values, Pr)
+
+ggplot(df, aes(x=values, y=Pr)) +
+  geom_point() + 
+  geom_segment( aes(x=values, xend=values, y=0, yend=Pr)) +
+  scale_x_continuous(breaks = values) +
+  theme_bw()
+
+```
+## 1.2 Характеристики прироста
+
+```{r characteristics}
+
+true_mean <- sum(values*Pr) # Истинное среднее (математическое ожидание)
+
+print(true_mean)
+
+variance <- sum((values-true_mean)^2*Pr) # Дисперсия
+
+print(variance)
+
+standard_deviation <- sqrt(variance)
+
+print(standard_deviation)
+
+```
+## 1.3 Однократная оценка по выборке
+
+```{r sample_1}
+
+n_patients <- 3 # Количество добровольцев 
+
+my_group_leu <- sample(c(0,1), n_patients, replace = TRUE) # Результаты добровольцев
+
+print(my_group_leu)
+
+sample_mean <- mean(my_group_leu)
+
+print(sample_mean)
+
+```
+
+## 1.4 Набираем статистику
+
+```{r sample_n}
+
+n_patients <- 50  # Количество добровольцев 
+
+n_repeats <- 1000 # Количество повторений эксперимента
+
+df_all_repeats <- data.frame(
+  n_exp = rep(1:n_repeats, each = n_patients),
+  ID =  rep(1:n_patients, n_repeats),
+  Leu = sample(c(0,1), n_repeats*n_patients, replace = TRUE) 
+)
+
+```
+
+## 1.5 Оценка среднего в каждом эксперименте
+
+```{r estimations, fig.width=4, fig.height=3}
+
+df_sample_mean <- df_all_repeats %>% 
+  group_by(n_exp) %>% 
+  dplyr::summarise(mean_leu = mean(Leu)) %>% 
+  mutate(normalized_mean_leu = (mean_leu - true_mean)*sqrt(n_patients)/standard_deviation) %>% 
+  ungroup()
+
+ggplot(df_sample_mean, aes(x = normalized_mean_leu)) +
+  geom_histogram(aes(y =..density..),
+                 color = 'black', fill = 'grey', bins = ceiling(log2(n_repeats) + 1) )+
+  stat_function(fun = dnorm, 
+                args = list(mean = 0, sd = 1), color = 'red') +
+  theme_bw()
+
+```
+
+# 2. Исследование значения прогностического индекса (от 0 до 1)
+
+## 2.1 Модель пациента
+
+```{r prog, echo=FALSE, fig.width=4, fig.height=3}
+
+a <- 0 # Минимальное значение индекса
+b <- 1 # Максимальное значение индекса
+
+
+ggplot() +
+  stat_function(fun = dunif, 
+                args = list(min = a, max = b)) +
+  xlim(a-1,b+1) +
+  theme_bw()
+
+
+```
+## 2.2 Характеристики индекса
+
+```{r characteristics}
+
+true_mean <- (a+b)/2 # Истинное среднее (математическое ожидание)
+
+print(true_mean)
+
+variance <- (b-a)^2/12 # Дисперсия
+
+print(variance)
+
+standard_deviation <- sqrt(variance)
+
+print(standard_deviation)
+
+```
+## 2.3 Однократная оценка по выборке
+
+```{r sample_1}
+
+n_patients <- 3 # Количество добровольцев 
+
+my_group_score <- runif(n_patients, min = a, max = b) # Результаты добровольцев
+
+print(my_group_score)
+
+sample_mean <- mean(my_group_score)
+
+print(sample_mean)
+
+```
+## 2.4 Набираем статистику
+
+```{r sample_n}
+
+n_patients <- 1  # Количество добровольцев 
+
+n_repeats <- 1000 # Количество повторений эксперимента
+
+df_all_repeats <- data.frame(
+  n_exp = rep(1:n_repeats, each = n_patients),
+  ID =  rep(1:n_patients, n_repeats),
+  Score = runif(n_repeats*n_patients, min = a, max = b) 
+)
+
+```
+
+## 2.5 Оценка среднего в каждом эксперименте
+
+```{r estimations, fig.width=4, fig.height=3}
+
+df_sample_mean <- df_all_repeats %>% 
+  group_by(n_exp) %>% 
+  dplyr::summarise(mean_score = mean(Score)) %>% 
+  mutate(normalized_mean_score = (mean_score - true_mean)*sqrt(n_patients)/standard_deviation) %>% 
+  ungroup()
+
+ggplot(df_sample_mean, aes(x = normalized_mean_score)) +
+  geom_histogram(aes(y =..density..),
+                 color = 'black', fill = 'grey') + #, bins = log2(n_repeats) + 1) +
+  stat_function(fun = dnorm, 
+                args = list(mean = 0, sd = 1), color = 'red') +
+  theme_bw()
+
+```
+
+# 3. Исследование времени жизни лабораторного животного
+
+## 3.1 Модель животного
+
+```{r animal, echo=FALSE, fig.width=4, fig.height=3}
+
+rate <- 1 # Коэффициент в экспоненциальном распределении
+
+ggplot() +
+  stat_function(fun = dexp, 
+                args = list(rate = rate)) +
+  xlim(0, 5/rate) +
+  theme_bw()
+
+
+```
+## 3.2 Характеристики времени жизни
+
+```{r characteristics}
+
+true_mean <- 1/rate # Истинное среднее (математическое ожидание)
+
+print(true_mean)
+
+variance <- 1/rate^2 # Дисперсия
+
+print(variance)
+
+standard_deviation <- sqrt(variance)
+
+print(standard_deviation)
+
+```
+## 3.3 Однократная оценка по выборке
+
+```{r sample_1}
+
+n_patients <- 3 # Количество животных 
+
+my_group_life <- rexp(n_patients, rate = rate) # Результаты добровольцев
+
+print(my_group_life)
+
+sample_mean <- mean(my_group_life)
+
+print(sample_mean)
+
+```
+## 3.4 Набираем статистику
+
+```{r sample_n}
+
+n_patients <- 30  # Количество животных 
+
+n_repeats <- 1000 # Количество повторений эксперимента
+
+df_all_repeats <- data.frame(
+  n_exp = rep(1:n_repeats, each = n_patients),
+  ID =  rep(1:n_patients, n_repeats),
+  Life = rexp(n_repeats*n_patients, rate = rate) 
+)
+
+```
+
+## 3.5 Оценка среднего в каждом эксперименте
+
+```{r estimations, fig.width=4, fig.height=3}
+
+df_sample_mean <- df_all_repeats %>% 
+  group_by(n_exp) %>% 
+  dplyr::summarise(mean_life = mean(Life)) %>% 
+  mutate(normalized_mean_score = (mean_life - true_mean)*sqrt(n_patients)/standard_deviation) %>% 
+  ungroup()
+
+ggplot(df_sample_mean, aes(x = normalized_mean_score)) +
+  geom_histogram(aes(y =..density..),
+                 color = 'black', fill = 'grey', bins = log2(n_repeats) + 1) +
+  stat_function(fun = dnorm, 
+                args = list(mean = 0, sd = 1), color = 'red') +
+  theme_bw()
+
+```
+
+# 4. Исследование изменения какого-то странного биомаркера
+
+## 4.1 Модель процесса
+
+```{r biomarker, echo=FALSE, fig.width=4, fig.height=3}
+
+ggplot() +
+  stat_function(fun = dcauchy, 
+                args = list(location = 0, scale = 1)) +
+  xlim(-4, 4) +
+  theme_bw()
+
+```
+## 4.2 Набираем статистику
+
+```{r sample_n}
+
+n_patients <- 1000  # Количество пациентов 
+
+n_repeats <- 1000 # Количество повторений эксперимента
+
+df_all_repeats <- data.frame(
+  n_exp = rep(1:n_repeats, each = n_patients),
+  ID =  rep(1:n_patients, n_repeats),
+  Diff_marker = rcauchy(n_repeats*n_patients, 0, 1) 
+)
+
+```
+
+## 4.3 Оценка среднего в каждом эксперименте
+
+```{r estimations, fig.width=4, fig.height=3}
+
+df_sample_mean <- df_all_repeats %>% 
+  group_by(n_exp) %>% 
+  dplyr::summarise(mean_diff_marker = mean(Diff_marker)) %>% 
+  mutate(normalized_mean_diff_marker = (mean_diff_marker - 0)*1/standard_deviation) %>% 
+  ungroup()
+
+ggplot(df_sample_mean, aes(x = normalized_mean_diff_marker)) +
+  geom_histogram(aes(y =..density..),
+                 color = 'black', fill = 'grey', bins = log2(n_repeats) + 1) +
+  stat_function(fun = dnorm, 
+                args = list(mean = 0, sd = 1), color = 'red') +
+  theme_bw()
+
+```

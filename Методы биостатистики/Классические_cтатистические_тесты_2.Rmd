@@ -1,0 +1,614 @@
+---
+title: "Bivariate_hypothesis_testing_2"
+author: "Oleg Arnaut"
+date: "2024-10-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+#install.packages('BSDA')
+#install.packages('readxl')
+
+library(readxl)
+
+library(tidyverse)
+library(ggplot2)
+library(BSDA)
+
+
+```
+
+
+#Распределения
+
+## Normal Distribution
+
+```{r}
+
+
+# Загрузка необходимых библиотек
+library(ggplot2)
+
+# Создание последовательности значений x
+x_values <- seq(-4, 4, by = 0.0001)
+
+# Рассчет значений PDF для стандартного нормального распределения
+pdf_normal <- dnorm(x_values, mean = 0, sd = 1)
+
+# Создание данных для построения графика PDF и визуализации стандартного нормального распределения
+pdf_data <- data.frame(x = x_values, Вероятность = pdf_normal)
+
+# Создание графика PDF для визуализации стандартного нормального распределения
+ggplot(pdf_data, aes(x = x, y = Вероятность)) +
+  geom_line(size = 1, color = "blue") +
+  labs(title = "PDF стандартного нормального распределения", x = "x", y = "Плотность вероятности") +
+  theme_minimal()
+
+
+
+
+```
+
+
+## Bernoulli Distribution
+  
+  
+```{r}
+ 
+# Загрузка необходимых библиотек
+library(ggplot2)
+
+# Определение вероятности успеха для распределения Бернулли
+p <- 0.3
+
+# Создание последовательности возможных значений (0 и 1)
+x_values <- c(0, 1)
+
+# Расчет значений PMF для распределения Бернулли (вероятностная масса)
+pmf_bernoulli <- c(1 - p, p)
+
+# Создание данных для построения графика PMF и визуализации распределения Бернулли
+pmf_data <- data.frame(x = x_values, Вероятность = pmf_bernoulli)
+
+# Создание графика PMF для визуализации распределения Бернулли
+ggplot(pmf_data, aes(x = factor(x), y = Вероятность)) +
+  geom_bar(stat = "identity", fill = "blue", color = "black", width = 0.5) +
+  labs(title = "PMF распределения Бернулли", x = "Исход", y = "Вероятность") +
+  theme_minimal()
+
+
+
+```
+
+
+
+## Binomial Distribution
+
+```{r}
+
+# Загрузка необходимых библиотек
+library(ggplot2)
+
+# Определение параметров биномиального распределения
+n <- 10   # Количество попыток
+p <- 0.2  # Вероятность успеха в каждой попытке
+
+# Создание последовательности возможных значений для числа успехов
+x_values <- 0:n
+
+# Расчет значений PMF для биномиального распределения
+pmf_binomial <- dbinom(x_values, size = n, prob = p)
+
+# Создание данных для построения графика PMF и визуализации биномиального распределения
+pmf_data <- data.frame(x = x_values, Вероятность = pmf_binomial)
+
+# Создание графика PMF для визуализации биномиального распределения
+ggplot(pmf_data, aes(x = factor(x), y = Вероятность)) +
+  geom_bar(stat = "identity", fill = "blue", color = "black", width = 0.5) +
+  labs(title = "PMF биномиального распределения", x = "Количество успехов", y = "Вероятность") +
+  theme_minimal()
+
+
+
+```
+
+
+
+
+## Poisson Distribution
+
+```{r}
+
+
+# Загрузка необходимых библиотек
+library(ggplot2)
+
+# Определение средней интенсивности событий для распределения Пуассона
+lambda <- 10  # Средняя интенсивность событий
+
+# Создание последовательности возможных значений для количества событий
+x_values <- 0:20
+
+# Расчет значений PMF для распределения Пуассона
+pmf_poisson <- dpois(x_values, lambda)
+
+# Создание данных для построения графика PMF и визуализации распределения Пуассона
+pmf_data <- data.frame(x = x_values, Вероятность = pmf_poisson)
+
+# Создание графика PMF для визуализации распределения Пуассона
+ggplot(pmf_data, aes(x = factor(x), y = Вероятность)) +
+  geom_bar(stat = "identity", fill = "blue", color = "black", width = 0.5) +
+  labs(title = "PMF распределения Пуассона", x = "Количество событий", y = "Вероятность") +
+  theme_minimal()
+
+
+
+
+```
+
+
+
+## Chi-Squared Distribution
+
+```{r}
+
+
+# Загрузка необходимых библиотек
+library(ggplot2)
+
+# Определение степеней свободы для распределения хи-квадрат
+df <- 15  # Степени свободы
+
+# Создание последовательности значений x
+x_values <- seq(0, 100, by = 0.1)  # Подстройте диапазон и размер шага по мере необходимости
+
+# Расчет значений PDF для распределения хи-квадрат
+pdf_chi_squared <- dchisq(x_values, df)
+
+# Создание данных для построения графика PDF и визуализации распределения хи-квадрат
+pdf_data <- data.frame(x = x_values, Плотность_вероятности = pdf_chi_squared)
+
+# Создание графика PDF для визуализации распределения хи-квадрат
+ggplot(pdf_data, aes(x = x, y = Плотность_вероятности)) +
+  geom_line(size = 1, color = "blue") +
+  labs(title = "PDF распределения хи-квадрат", x = "x", y = "Плотность вероятности") +
+  theme_minimal()
+
+
+
+
+```
+
+
+
+## Student's Distribution
+
+```{r}
+
+
+# Загрузка необходимых библиотек
+library(ggplot2)
+
+# Определение степеней свободы для t-распределения
+df <- 5  # Степени свободы
+
+# Создание последовательности значений x
+x_values <- seq(-3, 3, by = 0.1)  # Подстройте диапазон и размер шага по мере необходимости
+
+# Расчет значений PDF для t-распределения
+pdf_t <- dt(x_values, df)
+
+# Создание данных для построения графика PDF и визуализации t-распределения
+pdf_data <- data.frame(x = x_values, Плотность_вероятности = pdf_t)
+
+# Создание графика PDF для визуализации t-распределения
+ggplot(pdf_data, aes(x = x, y = Плотность_вероятности)) +
+  geom_line(size = 1, color = "blue") +
+  labs(title = "PDF t-распределения Стьюдента", x = "x", y = "Плотность вероятности") +
+  theme_minimal()
+
+```
+
+
+## Fisher-Snedecor Distribution
+
+```{r}
+
+# Загрузка необходимых библиотек
+library(ggplot2)
+
+# Определение степеней свободы для F-распределения
+df1 <- 100  # Число степеней свободы в числителе
+df2 <- 100  # Число степеней свободы в знаменателе
+
+# Создание последовательности значений x
+x_values <- seq(0.01, 5, by = 0.01)  # Подстройте диапазон и размер шага по мере необходимости
+
+# Рассчет значений PDF для F-распределения
+pdf_fisher <- df(x_values, df1, df2)
+
+# Создание данных для построения графика
+pdf_data <- data.frame(x = x_values, Вероятность = pdf_fisher)
+
+# Создание графика PDF для визуализации F-распределения
+ggplot(pdf_data, aes(x = x, y = Вероятность)) +
+  geom_line(size = 1, color = "blue") +
+  labs(title = "PDF распределения Фишера-Снедекора (F)", x = "x", y = "Плотность вероятности") +
+  theme_minimal()
+
+
+
+```
+
+
+## Z-критерий 
+
+```{r}
+
+# Загрузка необходимого пакета ggplot2
+library(ggplot2)
+
+#?quantile
+
+observed=2
+
+# Создание последовательности значений x
+x_values <- seq(-4, 4, by = 0.01)
+
+# Расчет значений Плотности Вероятности (PDF) для стандартного нормального распределения
+pdf_normal <- dnorm(x_values, mean = 0, sd = 1)
+
+# Квантили
+quantiles <- c(0.05, 0.95)
+
+quantile_values <- qnorm(quantiles, mean = 0, sd = 1)
+
+# Создание данных для построения графика
+pdf_data <- data.frame(x = x_values, Probability = pdf_normal)
+
+# Создание графика PDF для визуализации стандартного нормального распределения
+ggplot(pdf_data, aes(x = x)) +
+  geom_line(aes(y = Probability), linewidth = 1, color = "black", linetype = "solid") +
+  geom_vline(xintercept = quantile_values, linewidth = 1, linetype = "solid", color = "blue") +
+  geom_vline(xintercept = observed, linewidth = 1, linetype = "dashed", color = "red") +
+  annotate("text", x = quantile_values[1]-0.2, y = 0.2, label = sprintf("Q(%.3f)=%.2f", quantiles[1], quantile_values[1]), hjust = 0, angle = 90) +
+  annotate("text", x = quantile_values[2]-0.2, y = 0.2, label = sprintf("Q(%.3f)=%.2f", quantiles[2], quantile_values[2]), hjust = 0, angle = 90) +
+  annotate("text", x = observed-0.2, y = 0.1, label = 'observed', hjust = 0, angle = 90)+
+  labs(title = "PDF стандартного нормального распределения", x = "x", y = "Плотность вероятности")
+
+
+```
+
+## t-критерий 
+
+```{r}
+
+# Загрузка необходимого пакета ggplot2
+library(ggplot2)
+
+#?quantile
+
+observed=-4
+
+# cтепени свободы
+df <- 100
+
+# значения по оси x
+x_values <- seq(-4, 4, by = 0.01)  # Adjust the range and step size as needed
+
+# PDF значения для распределения t
+pdf_t <- dt(x_values, df)
+
+# Квантили
+quantiles <- c(0.05, 1)
+
+t_critical_low <- qt(quantiles[1], df = df)
+t_critical_up <-  qt(quantiles[2], df = df)
+
+# создание базы данных
+pdf_data <- data.frame(x = x_values, Probability = pdf_t)
+
+# Создание графика PDF для визуализации стандартного нормального распределения
+ggplot(pdf_data, aes(x = x)) +
+  geom_line(aes(y = Probability), linewidth = 1, color = "black", linetype = "solid") +
+  geom_vline(xintercept = t_critical_low, linewidth = 2, linetype = "solid", color = "blue") +
+  geom_vline(xintercept = t_critical_up, linewidth = 2, linetype = "solid", color = "blue") +
+  geom_vline(xintercept = observed, linewidth = 2, linetype = "dashed", color = "red") +
+  annotate("text", x = t_critical_low-0.15, y = 0.2, label = sprintf("Q(%.3f)=%.2f", quantiles[1], t_critical_low), hjust = 0, angle = 90) +
+  annotate("text", x = t_critical_up-0.15, y = 0.2, label = sprintf("Q(%.3f)=%.2f", quantiles[2], t_critical_up), hjust = 0, angle = 90) +
+  annotate("text", x = observed-0.15, y = 0.2, label = 'observed', hjust = 0, angle = 90)+
+  annotate("text", x = 2.5, y = 0.4, label = sprintf("df(%.0f)", df), hjust = 0)+
+  labs(title = "PDF распределения Стьюдента", x = "x", y = "Плотность вероятности")
+
+
+```
+
+
+
+## F критерий для разницы дисперсий (точный)
+
+```{r}
+
+# Загрузка необходимых библиотек
+library(ggplot2)
+
+# Расчет наблюдаемого значения F (замените на ваше фактическое наблюдаемое значение)
+observed_f_value <- 2  # Замените на ваше реальное наблюдаемое значение
+
+# Определение параметров степеней свободы для F-распределения
+df1 <- 15  # Степени свободы числителя
+df2 <- 20  # Степени свободы знаменателя
+
+# Создание последовательности значений x
+x_values <- seq(0.01, 5, by = 0.01)  # Подстраивайте диапазон и шаг по мере необходимости
+
+# Расчет значений PDF для F-распределения
+pdf_fisher <- df(x_values, df1, df2)
+
+# Определение уровня значимости (альфа) для критических значений
+quantiles <- c(0.05, 1)  # Подстраивайте по мере необходимости
+
+# Расчет критических значений для F-распределения
+critical_value_lower <- qf(quantiles[1], df1, df2)
+critical_value_upper <- qf(quantiles[2], df1, df2)
+
+# Создание data frame для построения графика
+pdf_data <- data.frame(x = x_values, Probability = pdf_fisher)
+
+# Создание графика PDF для визуализации F-распределения
+ggplot(pdf_data, aes(x = x, y = Probability)) +
+  geom_line(size = 1, color = "black") +
+  labs(title = "PDF F-распределения Фишера-Снедекора", x = "x", y = "Плотность вероятности") +
+  theme_minimal() +
+  geom_vline(xintercept = c(critical_value_lower, critical_value_upper, observed_f_value),
+             linetype = c("solid", "solid", "dashed"),
+             color = c("blue", "blue", "red"),
+             linewidth = c(2, 2, 2)) +
+  annotate("text", x = critical_value_lower-0.15, y = 0.2, label = sprintf("Q(%.3f)=%.2f", quantiles[1], critical_value_lower), hjust = 0, angle = 90) +
+  annotate("text", x = critical_value_upper-0.15, y = 0.2, label = sprintf("Q(%.3f)=%.2f", quantiles[2], critical_value_upper), hjust = 0, angle = 90) +
+  annotate("text", x = observed_f_value-0.15, y = 0.2, label = 'наблюдаемое', hjust = 0, angle = 90) +
+  annotate("text", x = 4, y = 0.6, label = sprintf("df1=%.0f, df2=%.0f", df1, df2), hjust = 0)
+
+
+
+```
+
+
+### Тест Фишера для отношения дисперсий vs t-test 
+
+Предположим, мы проводим исследование, в котором измерям уровень тиреоидных гормонов в контрольной и экспериментальной группе. 
+
+Нас интересует, есть ли разница в дисперсиях этих измерений между группами.
+
+
+```{r}
+
+# Наборы данных для группы A и группы B
+group_A <- c(15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)
+group_B <- c(10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30)
+
+#?var.test
+
+# Выполнение F-теста на отношения дисперсий
+результат_F_теста <- var.test(group_A, group_B)
+
+# Вывод результатов F-теста 
+cat("Результат F-теста (отношения дисперсий):\n")
+print(результат_F_теста)
+
+# Выполнение двухвыборочного t-теста для средних значений двух независимых выборок (предполагается неравенство дисперсий)
+результат_t_теста <- t.test(group_A, group_B, var.equal = FALSE)
+
+# Вывод результатов t-теста
+cat("\nРезультат t-теста (равенство средних):\n")
+print(результат_t_теста)
+
+
+```
+
+## Тест Манна-Уитни-Уилкоксона (вероятностное доминирование)
+
+```{r mw_1}
+
+#?wilcox.test()
+
+n <- 30
+
+t1 <- 1 # Средняя продолжительность болезни в группе 1
+t2 <- 1 # Средняя продолжительность болезни в группе 2
+
+sample_1 <- sort( round(rexp(n, 1/t1),2) )
+sample_2 <- sort( round(rexp(n, 1/t2),2) )
+
+df1 <- data.frame(n1 = 1:n,
+                  d1  = sort(sample_1))
+
+df2 <- data.frame(n2 = 1:n,
+                  d2  = sort(sample_2))
+
+df <- merge(df1, df2) %>% 
+  mutate(rez = case_when(
+    d1 > d2 ~ +1,
+    d1 < d2 ~ -1,
+    TRUE ~ 0)) %>% 
+  dplyr::select(-c("d1", "d2")) %>% 
+  pivot_wider(names_from = n2, values_from = rez) %>% 
+  tibble::column_to_rownames('n1')
+
+pheatmap::pheatmap(df,
+                   cluster_cols = FALSE,
+                   cluster_rows = FALSE)
+
+
+
+```
+
+
+## Критерий Chi squared
+
+```{r}
+
+
+# Загрузка необходимых библиотек
+library(ggplot2)
+
+
+# Расчет наблюдаемого значения хи-квадрат (замените на ваше фактическое наблюдаемое значение)
+observed_chi_squared <- 5.9  # Замените на ваше реальное наблюдаемое значение
+
+# Определение степеней свободы для распределения хи-квадрат
+df <- 1  # Подстраивайте степени свободы по мере необходимости
+
+# Создание последовательности значений x
+x_values <- seq(0.01, 10, by = 0.01)  # Подстраивайте диапазон и шаг по мере необходимости
+
+# Расчет значений PDF для распределения хи-квадрат
+pdf_chi_squared <- dchisq(x_values, df)
+
+# Квантили
+quantiles <- c(0, 0.95)
+
+# Расчет критических значений для распределения хи-квадрат
+critical_value_lower <- qchisq(quantiles[1], df)
+critical_value_upper <- qchisq(quantiles[2], df)
+
+
+
+# Создание data frame для построения графика
+pdf_data <- data.frame(x = x_values, Probability = pdf_chi_squared)
+
+# Создание графика PDF для визуализации распределения хи-квадрат
+ggplot(pdf_data, aes(x = x, y = Probability)) +
+  geom_line(size = 1, color = "black") +
+  labs(title = "PDF распределения хи-квадрат", x = "x", y = "Плотность вероятности") +
+  theme_minimal() +
+  geom_vline(xintercept = c(critical_value_lower, critical_value_upper, observed_chi_squared),
+             linetype = c("solid", "solid", "dashed"),
+             color = c("blue", "blue", "red"),
+             size = c(2, 2, 2)) +
+  annotate("text", x = critical_value_lower - 0.5, y = 0.1, label = sprintf("Q(%.3f)=%.2f", quantiles[1], critical_value_lower), hjust = 0, angle = 90) +
+  annotate("text", x = critical_value_upper - 0.5, y = 0.1, label = sprintf("Q(%.3f)=%.2f", quantiles[2], critical_value_upper), hjust = 0, angle = 90) +
+  annotate("text", x = observed_chi_squared - 0.5, y = 0.1, label = 'наблюдаемое', hjust = 0, angle = 90) +
+  annotate("text", x = critical_value_upper - 1, y = 0.5, label = sprintf("df = %.0f", df), hjust = 0)
+
+
+```
+
+
+```{r}
+
+# Создание таблицы сопряженности (замените своими данными)
+m <- matrix(c(100, 80, 200, 100), nrow = 2)
+rownames(m) <- c("Группа A", "Группа В")
+colnames(m) <- c("Болен", "Здоров")
+
+print(m)
+
+# Проведение теста хи-квадрат для ассоциации
+chi_result <- chisq.test(m)
+
+# Извлечение стандартизированных остатков
+residuals <- chi_result$residuals
+
+cat("\nСтандартизированные остатки:\n")
+print(residuals)
+
+
+```
+
+
+## chisq.test
+
+```{r}
+
+?chisq.test
+
+
+x <- matrix(c(5, 1, 1, 4), ncol=2)
+rownames(x) <- c("Group A", "Group B")
+colnames(x) <- c("Outcome 1", "Outcome 2")
+
+# тест хи-квадрат
+print(chisq.test(x))   
+
+
+
+```
+
+
+В случае если есть ячейки с ожидаемым значением <1 и более 20% ячеек с значениями <5 можно использовать метод Монте-Карло
+
+## chisq.test Monte Carlo
+
+
+```{r}
+
+# тест хи-квадрат
+print(chisq.test(x, simulate.p.value = TRUE, B = 10000)) 
+
+```
+
+## chisq.test() goodness of fit (критерий соответствия), Хи-квадрат критерий согласия 
+
+```{r}
+
+# Наблюдаемые частоты
+observed <- c(8, 12, 10, 9, 16)
+
+# Проведение теста хи-квадрат
+chi <- chisq.test(observed, p = c(0.2, 0.2, 0.2, 0.2, 0.2))
+
+# Вывод результатов
+print(chi)
+
+# Интерпретация результатов
+alpha <- 0.05
+if (chi$p.value < alpha) {
+  cat("Отклонить нулевую гипотезу\n")
+} else {
+  cat("Не удалось отклонить нулевую гипотезу\n")
+}
+
+chi$residuals
+
+
+```
+
+
+# Повторные измерения для таблиц сопряжённости (Тест Мак-Немара)
+H0: Вероятность события до воздействия равна вероятности события после воздействия
+H0: Вероятность события до воздействия не равна вероятности события после воздействия
+
+Похож на Chi squared !!!
+
+```{r}
+
+
+?mcnemar.test
+
+# Пример данных с двумя категориальными переменными (до и после воздействия)
+
+my_matrix <- matrix(c(9, 1, 1, 9), 
+             nrow = 2, ncol = 2, 
+             dimnames = list("До" = c("Инфильтрация +", "Инфильтрация -"), 
+                             "После" = c("Инфильтрация +", "Инфильтрация -")))
+
+# Вывод таблицы сопряженности
+print(my_matrix)
+
+# Chi squared test
+print(chisq.test(my_matrix, simulate.p.value = TRUE, B = 10000))
+
+# McNemar's test
+print(mcnemar.test(my_matrix))
+
+
+
+```
+
+
+
+
