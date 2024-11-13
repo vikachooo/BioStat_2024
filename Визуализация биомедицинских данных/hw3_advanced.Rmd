@@ -1,0 +1,286 @@
+---
+title: "HW Advanced dataviz"
+author: "Victoria Zaitceva"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(factoextra)
+theme_set(theme_minimal())
+```
+
+
+```{r}
+
+data <- readRDS("C:/Users/VictoriaZaitceva/Desktop/personal/BioStat_2024/Визуализация биомедицинских данных/data/very_low_birthweight.RDS")
+data <- readRDS("data/very_low_birthweight.RDS")
+
+getwd()
+```
+
+```{r}
+summary(data)
+```
+```{r}
+
+data_clean <- data |>
+  select(-where(~sum(is.na(.x)) > 100)) |>
+  drop_na()
+
+
+data_clean <- data_clean |>
+  mutate(across(
+    where(~ is.numeric(.x) && max(.x) == 1 && min(.x) == 0),
+         ~ as.factor(.)
+  ))
+
+summary(data_clean)
+```
+Постройте графики плотности распределения для числовых переменных. Удалите выбросы, если таковые имеются. Преобразуйте категориальные переменные в факторы. Для любых двух числовых переменных раскрасьте график по переменной ‘inout’.
+
+
+```{r}
+library(ggpubr)
+
+
+vars <- data_clean |> select(where(is.numeric)) |> names()
+
+
+plot_list <- lapply(vars, function(var) {
+  ggplot(data_clean, aes_string(x = var, fill = "inout")) +
+    geom_density(alpha = 0.5)
+})
+
+
+ggarrange(plotlist = plot_list, ncol = 3, nrow = 5)
+```
+
+
+```{r}
+
+ggplot(data_clean, aes(x = lowph, fill = inout)) +
+  geom_histogram()
+
+
+data_clean <- data_clean |>
+  filter(lowph > mean(lowph, na.rm = TRUE) - 3 * sd(lowph, na.rm = TRUE) & 
+           lowph < mean(lowph, na.rm = TRUE) + 3 * sd(lowph, na.rm = TRUE))
+
+
+```
+
+
+Проведите тест на сравнение значений колонки ‘lowph’ между группами в переменной inout. Вид статистического теста определите самостоятельно. Визуализируйте результат через библиотеку 'rstatix'. Как бы вы интерпретировали результат, если бы знали, что более низкое значение lowph ассоциировано с более низкой выживаемостью?
+
+
+```{r}
+# t test lowph by inout
+
+t.test(lowph ~ inout, data = data_clean)
+
+#Визуализируйте результат через библиотеку 'rstatix'
+library(rstatix)
+
+t <- data_clean |> 
+  t_test(lowph ~ inout)
+
+
+p <- ggplot(data_clean, aes(x = inout, y = lowph)) +
+  geom_boxplot(aes(fill = inout), alpha = 0.7) +
+  scale_fill_manual(values = c("red", "blue"))
+
+p + stat_pvalue_manual(
+  t,
+  label = "p = {p}",
+  y.position = max(data_clean$lowph, na.rm = TRUE) * (1.1))
+```
+
+
+Сделайте новый датафрейм, в котором оставьте только континуальные или ранговые данные, кроме 'birth', 'year' и 'exit'. Сделайте корреляционный анализ этих данных. Постройте два любых типа графиков для визуализации корреляций.
+
+
+```{r}
+
+for (name in colnames(data_clean)) {
+  print(paste(name, ":", class(data_clean[[name]])))
+}
+
+
+final_data <- data_clean |>
+  select(where(~ is.numeric(.x) | is.integer(.x))) |>
+  select(-birth, -year, -exit)
+```
+
+
+```{r}
+library(GGally)
+
+ggpairs(final_data)
+```
+
+```{r}
+library(corrplot)
+final_data %>% 
+  cor() %>% 
+  corrplot(
+    order = 'hclust'
+  )
+
+```
+
+
+
+
+```{r}
+library(corrr)
+
+final_data %>% 
+  cor() %>% 
+  network_plot(min_cor = .0)
+
+```
+Постройте иерархическую кластеризацию на этом датафрейме.
+
+```{r}
+# 1. Scale
+
+
+final_data_scaled <- final_data |> 
+  scale()
+
+# 2. Distance matrix
+
+dist_matrix <- dist(final_data_scaled, 
+                    method = "euclidean")
+
+
+# 3. Высчитываем дендограмму кластеров 
+
+hc <- hclust(dist_matrix, 
+             method = "ward.D2")
+
+# 4. Визуализируем дендограмму
+
+fviz_dend(hc,
+          k = 3, 
+          cex = 0.4, 
+          horiz = TRUE, 
+          k_colors = "jco",
+          rect = TRUE, 
+          rect_border = "jco", 
+          rect_fill = TRUE)
+
+```
+
+
+
+Сделайте одновременный график heatmap и иерархической кластеризации. Интерпретируйте результат.
+
+```{r}
+library(pheatmap)
+
+pheatmap(final_data_scaled, 
+         show_rownames = FALSE, 
+         clustering_distance_rows = dist_matrix,
+         clustering_method = "ward.D2", 
+         #scale = "row", # scale = "row" - стандартизация по строкам
+         cutree_rows = 5, # количество групп(кластеров)
+         cutree_cols = length(colnames(final_data_scaled)),
+         angle_col = 45)
+```
+
+
+Проведите PCA анализ на этих данных. Проинтерпретируйте результат. Нужно ли применять шкалирование для этих данных перед проведением PCA?
+
+
+```{r}
+library(FactoMineR)
+library(ggbiplot) 
+
+final_data.pca <- prcomp(final_data, 
+                scale = T) 
+summary(final_data.pca)
+
+```
+```{r}
+ fviz_pca_var(final_data.pca, col.var = "contrib")
+```
+Постройте biplot график для PCA. Раскрасьте его по значению колонки 'dead'.
+
+```{r}
+ggbiplot(final_data.pca, 
+         scale=0, alpha = 0.5,
+         groups = data_clean$dead,
+         ellipse = T)
+```
+
+Переведите последний график в 'plotly'. При наведении на точку нужно, чтобы отображалось id пациента.
+
+```{r}
+
+data_clean$patient_id <- 1:nrow(data_clean)
+
+library(plotly)
+
+
+p <- ggbiplot(final_data.pca, 
+              scale = 0,
+              groups = data_clean$dead,
+              ellipse = TRUE,
+              alpha = 0.3) +
+  geom_point(aes(text = paste("Patient ID:", data_clean$patient_id), 
+                 color = data_clean$dead),  
+             alpha = 0.3)
+
+
+ggplotly(p, tooltip = "text")
+
+
+
+```
+
+
+
+
+```{r}
+fviz_contrib(final_data.pca, choice = "var", axes = 1, top = 24) 
+```
+
+
+Дайте содержательную интерпретацию PCA анализу. Почему использовать колонку 'dead' для выводов об ассоциации с выживаемостью некорректно? 
+
+
+
+
+
+
+Приведите ваши данные к размерности в две колонки через UMAP. Сравните результаты отображения точек между алгоритмами PCA и UMAP.
+
+
+```{r}
+library(tidymodels)
+library(embed)
+library(umap)
+
+
+umap_prep <- recipe(~., data = final_data) %>%
+  step_normalize(all_predictors()) %>%
+  step_umap(all_predictors()) %>%
+  prep() %>%
+  juice() %>%
+  mutate(dead = data_clean$dead, inout = data_clean$inout)  # Add `dead` and `inout` columns
+
+
+
+umap_prep %>%
+  ggplot(aes(UMAP1, UMAP2)) +
+  geom_point(aes(color = dead, shape = inout), 
+             alpha = 0.7, size = 2) +
+  labs(color = NULL)
+
+```
+
+
