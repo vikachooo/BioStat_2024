@@ -1,0 +1,262 @@
+---
+title: "Multiple comparisons hw"
+author: "Victoria Zaitceva"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(tidyverse)
+
+```
+
+
+# Есть ли разница между средним ростом футболистов, играющих на разных позициях?
+
+Data
+
+```{r}
+soccer_general <- read.csv("soccer.csv", sep=";")[, 2:6] %>%
+  mutate(Position = as.factor(Position),
+         Nationality = as.factor(Nationality),
+         Age = as.numeric(Age),
+         Height = as.numeric(Height)) %>%
+  filter(Nationality %in% c("Spanish", "Italian", "German", "English", "Argentinian"))
+
+set.seed(1)
+
+soccer_wrk <- soccer_general[sample(1:nrow(soccer_general), 150), ] %>%
+  mutate(Nationality = factor(Nationality))
+```
+
+Boxplots of height by position
+
+```{r}
+
+soccer_wrk %>%
+  ggplot() + aes(Position, Height) +
+  geom_boxplot(outlier.shape = "", colour = "cadetblue3") +
+  geom_jitter(width = 0.2, colour = "cornsilk4") +
+  theme_classic() +
+  ylab("Height (cm)")
+```
+
+
+
+## 1. Постройте доверительные интервалы для попарных разниц между средними (без поправок и с поправкой Бонферрони). Покрывают ли интервалы реальную разницу между средним ростом? Иллюстрации приветствуются.
+
+
+pairwise.t.test, because t.test (paired = TRUE) is for two groups only
+
+
+```{r}
+
+pairwise_results_raw <- pairwise.t.test(soccer_wrk$Height, soccer_wrk$Position, p.adjust.method = "none", pool.sd = FALSE)
+
+
+pairwise_results_adj <- pairwise.t.test(soccer_wrk$Height, soccer_wrk$Position, p.adjust.method = "bonferroni", pool.sd = FALSE)
+
+
+pairwise_results <- pairwise_results_raw %>% broom::tidy() %>% 
+  rename(p.value_raw = p.value) %>%
+  left_join(pairwise_results_adj %>% broom::tidy() %>% 
+  rename(p.value_bonf_adj = p.value), by = c("group1" = "group1", "group2" = "group2")) %>%
+  rename(Position1 = group1, Position2 = group2) %>%
+  # to make sure that the order of the positions is consistent
+  mutate(
+    Pos1 = pmin(Position1, Position2),
+    Pos2 = pmax(Position1, Position2)
+  ) %>%
+  select(-Position1, -Position2)
+  
+
+pairwise_results
+
+```
+
+```{r}
+
+group_stats <- soccer_wrk %>%
+  group_by(Position) %>%
+  summarise(
+    mean = mean(Height, na.rm = TRUE),
+    sd = sd(Height, na.rm = TRUE),
+    n = n()
+  )
+
+group_stats
+
+```
+
+
+```{r}
+
+all_possible_pairs <- expand.grid(Position1 = group_stats$Position, Position2 = group_stats$Position)%>%
+  filter(as.character(Position1) < as.character(Position2))
+
+all_possible_pairs
+
+```
+
+```{r}
+pairwise_stats <- all_possible_pairs %>%
+  left_join(group_stats, by = c("Position1" = "Position")) %>%
+  rename(mean1 = mean, sd1 = sd, n1 = n) %>%
+  left_join(group_stats, by = c("Position2" = "Position")) %>%
+  rename(mean2 = mean, sd2 = sd, n2 = n)
+
+
+pairwise_stats <- pairwise_stats %>%
+  mutate(
+    mean_diff = mean1 - mean2,
+    SE = sqrt((sd1^2 / n1) + (sd2^2 / n2)),
+    t_crit = qt(1 - (0.05 / nrow(pairwise_stats)), df = pmin(n1, n2) - 1),
+    CI_lower = mean_diff - t_crit * SE,
+    CI_upper = mean_diff + t_crit * SE
+  ) %>%
+  # to make sure that the order of the positions is consistent
+   mutate(
+    Pos1 = pmin(as.character(Position1), as.character(Position2)),
+    Pos2 = pmax(as.character(Position1), as.character(Position2))
+  ) %>%
+  select(-Position1, -Position2)
+  
+
+pairwise_stats
+```
+
+
+
+```{r}
+pairwise_stats <- pairwise_stats %>%
+   left_join(pairwise_results, by = c("Pos1", "Pos2")) %>%
+   select(Pos1, Pos2, everything())
+
+pairwise_stats
+```
+
+```{r}
+pairwise_stats %>% 
+  mutate(comparison = paste(Pos1, "vs.", Pos2),
+         label_p = paste0("raw p-value = ", signif(p.value_raw, 3), "\nadjusted p-value = ", signif(p.value_bonf_adj, 3))) %>% 
+  ggplot(aes(x = mean_diff, y = comparison)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(xmin = CI_lower, xmax = CI_upper), width = 0.2) +
+  geom_vline(xintercept=0, color='red', linetype='dashed') +
+  geom_text(aes(label = label_p), vjust = -0.5, size = 2) +
+  labs(
+    title = "Confidence Intervals for Pairwise Comparisons",
+    y = "Comparison",
+    x = "Mean Difference in Height"
+  ) +
+  theme_bw() +
+  theme(axis.title.y = element_blank())
+
+```
+
+Таким образом, значимая разница в ростe наблюдается при сравнении goalkeeper vs midfielder, forward vs goalkeeper, defender vs midfielder, defender  vs goalkeeper, что подтверждается значениями p-values и доверительными интервалами.
+
+
+```{r}
+for (i in 1:nrow(pairwise_stats)) {
+  if (pairwise_stats$p.value_bonf_adj[i] < 0.05) {
+    # Determine which position has a higher mean
+    if (pairwise_stats$mean1[i] > pairwise_stats$mean2[i]) {
+      cat("Significant difference:", pairwise_stats$Pos1[i], "is higher than", pairwise_stats$Pos2[i],
+          "by", round(pairwise_stats$mean_diff[i], 2), "\n")
+    } else {
+      cat("Significant difference:", pairwise_stats$Pos2[i], "is higher than", pairwise_stats$Pos1[i],
+          "by", round(abs(pairwise_stats$mean_diff[i]), 2), "\n")
+    }
+  }
+}
+```
+
+## 2. Проведите попарные тесты для разниц между средними (без поправок, с поправкой Холма и поправкой Бенджамини-Хохберга). Сколько открытий получилось в каждом случае? Сколько из них ложные?
+
+
+```{r}
+
+# no adjustment
+
+pairwise_results_raw <- pairwise.t.test(
+  soccer_wrk$Height, 
+  soccer_wrk$Position, 
+  p.adjust.method = "none", 
+  pool.sd = FALSE
+) %>% broom::tidy() %>% mutate(Significant = if_else(p.value < 0.05, TRUE, FALSE))
+
+pairwise_results_raw
+
+
+
+
+# Holm adjustment
+
+pairwise_results_holm <- pairwise.t.test(
+  soccer_wrk$Height, 
+  soccer_wrk$Position, 
+  p.adjust.method = "holm", 
+  pool.sd = FALSE
+) %>% broom::tidy() %>% mutate(Significant = if_else(p.value < 0.05, TRUE, FALSE))
+
+
+pairwise_results_holm
+
+
+
+# BH adjustment
+
+
+pairwise_results_BH <- pairwise.t.test(
+  soccer_wrk$Height, 
+  soccer_wrk$Position, 
+  p.adjust.method = "BH", 
+  pool.sd = FALSE
+) %>% broom::tidy() %>% mutate(Significant = if_else(p.value < 0.05, TRUE, FALSE))
+                               
+pairwise_results_BH
+
+
+
+```
+
+
+```{r}
+cat("With no adjustment for multiple comparisons, significant differences found:\n\n")
+
+for (i in 1:nrow(pairwise_results_raw)) {
+  if (pairwise_results_raw$Significant[i] == TRUE) {
+    cat(pairwise_results_raw$group1[i], "and", pairwise_results_raw$group2[i], "\n")
+  }
+}
+
+
+cat("\n\nWith Holm adjustment for multiple comparisons, significant differences found:\n\n")
+
+for (i in 1:nrow(pairwise_results_holm)) {
+  if (pairwise_results_holm$Significant[i] == TRUE) {
+    cat(pairwise_results_holm$group1[i], "and", pairwise_results_holm$group2[i], "\n")
+  }
+}
+
+
+cat("\n\nWith BH adjustment for multiple comparisons, significant differences found:\n\n")
+
+for (i in 1:nrow(pairwise_results_BH)) {
+  if (pairwise_results_BH$Significant[i] == TRUE) {
+    cat(pairwise_results_BH$group1[i], "and", pairwise_results_BH$group2[i], "\n")
+}
+}  
+```
+
+То есть поправки не внесли принципиальной разницы. 
+
+
+
+
+
+Hint: вам может пригодиться функция pairwise.t.test.
+Hint 2: параметр задайте параметр pool.sd = FALSE.
