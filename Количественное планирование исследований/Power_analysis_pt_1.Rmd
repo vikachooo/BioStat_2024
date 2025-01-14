@@ -1,0 +1,502 @@
+---
+title: "Sample_size_calc"
+author: "Glazkov A.A."
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(TrialSize)
+library(epiR)
+library(DescTools)
+library(rstatix) # собирать таблицы с результатами 
+ins
+```
+
+# Моделируем ситуацию, когда эффективность А и Б одинакова
+
+## Функция, которая моделирует 1 эксперимент
+
+```{r}
+
+experiment <- function(n, m1, sd1, m2, sd2){
+    
+    sample1 <- rnorm(n, m1, sd1) # Генерируем выборку 1
+    sample2 <- rnorm(n, m2, sd2) # Генерируем выборку 2
+    
+    test_res <- t.test(sample1, sample2) # Проводим t-test
+    
+    tibble(p = test_res$p.value,                               # p-value
+           H0_rejected = ifelse(p < 0.05, 1, 0),               # "1", если отвергли H0 и "0", если нет
+           diff = test_res$estimate[1] - test_res$estimate[2]) # различия m1 - m2
+    
+}
+
+```
+
+Проверим как функция работает:
+
+```{r}
+
+experiment(50, 50, 10, 52, 10) # Проводим единичный эксперимент
+
+```
+
+## Проведём 1000 экспериментов с верной H0
+
+```{r}
+
+# Задаём условия верной H0
+
+m1 <- m2 <- 52.1
+sd1 <- sd2 <- 10.1
+
+# Задаём n
+
+n <- 50
+
+# Повторяем эксперимент 1000 раз и сохраняем результаты каждого эксперимента 
+# в таблицу series_1
+
+series_1 <- lapply(1:1000, function(i) experiment(n, m1, sd1, m2, sd2)) %>% bind_rows() 
+
+series_1 %>% head()
+
+```
+
+Cколько раз H0 была отвергнута в этой тысяче экспериментов?
+
+```{r}
+
+sum(series_1$H0_rejected)
+
+```
+
+С какой частотой мы с вами совершили ошибку первого рода?
+
+
+## 10 раз проведём по 1000 экспериментов с разной численностью наблюдений 
+
+Подставьте свои значения для m1 и m2, sd1 и sd2
+
+```{r}
+
+# Задаём условия
+
+m1 <- m2 <- 52.1
+sd1 <- sd2 <- 10.1
+
+# Выбираем количество итераций
+
+iterations <- 1000
+
+# Пишем "цикл" в "цикле"
+# Для 20, 40, 60 ... 200 наблюдений проводим серии по 1000 экспериментов
+
+lapply(seq(20, 200, 20), function(n){
+    lapply(1:iterations, function(i) experiment(n, m1, sd1, m2, sd2)) %>% 
+        bind_rows() -> series_result
+    
+    tibble(
+        n,                                                                      # Количество наблюдений
+        H0_rejection_rate = sum(series_result$H0_rejected) / iterations,        # Частота отклонения H0
+        Mean_diff = mean(series_result[series_result$H0_rejected == 1,]$diff),  # Средняя величина различий при отклонении H0
+        SD_diff = sd(series_result[series_result$H0_rejected == 1,]$diff)       # Станд. отклон. величины различий при отклонении H0
+    )
+}) %>% bind_rows() -> results_1
+
+results_1
+```
+
+Построим наглядные графики:
+
+```{r, fig.height=2.5, fig.width=5, dpi=100}
+
+# Частота совершения ошибки первого рода составила...
+
+results_1 %>% 
+    ggplot(aes(x = n, y = H0_rejection_rate)) + 
+    geom_bar(stat = "identity",
+             fill = "red",
+             alpha = 0.5,
+             color = "black") + 
+    # geom_hline(yintercept = 0.05,
+    #            linetype = "dashed",
+    #            linewidth = 0.75) +
+    scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.1)) +
+    scale_x_continuous(breaks = seq(20, 200, 20)) +
+    geom_text(x = 180, y = 1,
+              label = str_c("m1 = ", m1, ", sd1 = ", sd1,
+                            "\nm2 = ", m2, ", sd2 = ", sd2),
+              vjust = 1,
+              size = 3) + 
+    theme_bw()    
+
+```
+
+
+# Моделируем ситуацию, когда препарат Б лучше препарата А
+
+## Эксперимент № 1
+
+```{r}
+
+# Задаём условия
+
+m1 <- 52.1
+m2 <- 57.5
+sd1 <- sd2 <- 10.1
+
+# Количество итераций
+
+iterations <- 1000
+
+# Пишем "цикл" в "цикле"
+# Для 20, 40, 60 ... 200 наблюдений проводим серии по 1000 экспериментов
+
+lapply(seq(20, 200, 20), function(n){
+    lapply(1:iterations, function(i) experiment(n, m1, sd1, m2, sd2)) %>% 
+        bind_rows() -> series_result
+    
+    tibble(
+        n,                                                                      # Количество наблюдений
+        H0_rejection_rate = sum(series_result$H0_rejected) / iterations,        # Частота отклонения H0
+        Mean_diff = mean(series_result[series_result$H0_rejected == 1,]$diff),  # Средняя величина различий при отклонении H0
+        SD_diff = sd(series_result[series_result$H0_rejected == 1,]$diff)       # Станд. отклон. велилчины различий при отклонении
+    )
+}) %>% bind_rows() -> results_2
+
+results_2
+
+```
+
+```{r, fig.height=2.5, fig.width=5, dpi=100}
+
+# Частота совершения ошибки второго рода составила
+
+results_2 %>% 
+    ggplot(aes(x = n, y = H0_rejection_rate)) + 
+    geom_bar(stat = "identity",
+             fill = "lightblue",
+             alpha = 0.5,
+             color = "black") + 
+    geom_hline(yintercept = 0.8,
+               linetype = "dashed",
+               linewidth = 0.75) +
+    scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+    scale_x_continuous(breaks = seq(20, 200, 20)) +
+    geom_text(x = 10, y = 1,
+              label = str_c("m1 = ", m1, ", sd1 = ", sd1,
+                            "\nm2 = ", m2, ", sd2 = ", sd2),
+              vjust = 1,
+              hjust = 0,
+              size = 3) + 
+    theme_bw() 
+
+```
+
+## Эксперимент № 2
+
+```{r}
+
+m1 <- 52.1
+m2 <- 57.5
+sd1 <- sd2 <- 20.2
+
+iterations <- 1000
+
+lapply(seq(20, 200, 20), function(n){
+    lapply(1:iterations, function(i) experiment(n, m1, sd1, m2, sd2)) %>% 
+        bind_rows() -> series_result
+    
+    tibble(
+        n,                                                                      # Количество наблюдений
+        H0_rejection_rate = sum(series_result$H0_rejected) / iterations,        # Частота отклонения H0
+        Mean_diff = mean(series_result[series_result$H0_rejected == 1,]$diff),  # Средняя величина различий при отклонении H0
+        SD_diff = sd(series_result[series_result$H0_rejected == 1,]$diff)       # Станд. отклон. велилчины различий при отклонении
+    )
+}) %>% bind_rows() -> results_3
+
+results_3
+
+```
+
+```{r, fig.height=2.5, fig.width=5, dpi=100}
+
+# Частота совершения ошибки второго рода составила
+
+results_3 %>% 
+    ggplot(aes(x = n, y = H0_rejection_rate)) + 
+    geom_bar(stat = "identity",
+             fill = "lightblue",
+             alpha = 0.5,
+             color = "black") + 
+    geom_hline(yintercept = 0.8,
+               linetype = "dashed",
+               linewidth = 0.75) +
+    scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+    scale_x_continuous(breaks = seq(20, 200, 20)) +
+    geom_text(x = 10, y = 1,
+              label = str_c("m1 = ", m1, ", sd1 = ", sd1,
+                            "\nm2 = ", m2, ", sd2 = ", sd2),
+              vjust = 1,
+              hjust = 0,
+              size = 3) + 
+    theme_bw()    
+
+```
+
+# Расчёт размера выборки - как это работает?
+
+## Количественная конечная точка
+
+Давайте посчитаем, размер выборки для нашего примера:
+
+Надо найти различия между препаратом А и Б.
+
+Ожидается, что разница составит ~5 м, при стандартном отклонении 10.1 м.
+
+```{r}
+
+power.t.test(
+             delta = 5, 
+             sd = 10.1, 
+             sig.level = 0.05, 
+             power = 0.8,
+             type = "two.sample", 
+             alternative = "two.sided")
+
+```
+Нам нужно по 66 пациентов в каждую группу. 
+Давайте перепроверим наш расчёт!
+
+## Мы "угадали", как часто мы будем отвергать H0?
+
+```{r}
+
+# Задаём условия верной H0
+
+m1 <- 52.1
+m2 <- 57.1
+sd1 <- sd2 <- 10.1
+
+# Задаём n
+
+n <- 66
+
+# Повторяем эксперимент 1000 раз и сохраняем результаты каждого эксперимента 
+# в таблицу series_1
+
+series_2.1 <- lapply(1:1000, function(i) experiment(n, m1, sd1, m2, sd2)) %>% bind_rows() 
+
+sum(series_2.1$H0_rejected) / 1000
+
+```
+
+## Мы не "угадали", как часто мы будем отвергать H0?
+
+### Величина эффекта меньше той, для которой мы рассчитали выборку
+
+```{r}
+
+# Задаём условия верной H0
+
+m1 <- 52.1
+m2 <- 57.1
+sd1 <- sd2 <- 12.1
+
+# Задаём n
+
+n <- 66
+
+# Повторяем эксперимент 1000 раз и сохраняем результаты каждого эксперимента 
+# в таблицу series_1
+
+series_2.2 <- lapply(1:1000, function(i) experiment(n, m1, sd1, m2, sd2)) %>% bind_rows() 
+
+sum(series_2.2$H0_rejected) / 1000
+
+```
+
+### Величина эффекта больше той, для которой мы рассчитали выборку
+
+```{r}
+
+# Задаём условия верной H0
+
+m1 <- 52.1
+m2 <- 59.1
+sd1 <- sd2 <- 10.1
+
+# Задаём n
+
+n <- 66
+
+# Повторяем эксперимент 1000 раз и сохраняем результаты каждого эксперимента 
+# в таблицу series_1
+
+series_2.3 <- lapply(1:1000, function(i) experiment(n, m1, sd1, m2, sd2)) %>% bind_rows() 
+
+sum(series_2.3$H0_rejected) / 1000
+
+```
+
+## Качественная конечная точка
+
+Надо найти различия между лечением А (новое) и Б (старое).
+Конечная точка - качественная (препарат эффективен).
+
+Ожидается, что разница составит ~15%.
+При этом старое лечение эффективно в 20% случаев.
+
+```{r}
+
+power.prop.test(
+    p1 = 0.2,
+    p2 = 0.35,
+    sig.level = 0.05,
+    power = 0.8,
+    alternative = "two.sided"
+)
+
+```
+
+Посчитайте, что будет, если старое лечение было эффективно в 45% случаев:
+
+```{r}
+
+power.prop.test(
+    p1 = ,
+    p2 = ,
+    sig.level = 0.05,
+    power = 0.8,
+    alternative = "two.sided"
+)
+
+```
+Почему так?
+
+```{r}
+
+CI_method <- "modified wilson"
+
+CI_width <- tibble(Proportion = rep(seq(0, 1, 0.01), 4),
+                   N = rep(c(50, 100, 200, 400), each = 101)) %>% 
+    rowwise() %>% 
+    mutate(X = floor(N * Proportion),
+           LCL = BinomCI(X, N, method = CI_method)[2],
+           UCL = BinomCI(X, N, method = CI_method)[3],
+           CI_width = 100 * (UCL - LCL))
+
+
+CI_width %>% 
+    mutate(N = N %>% as.factor()) %>% 
+    ggplot(aes(x = Proportion,
+               y = CI_width,
+               color = N)) + 
+    geom_line(size = 0.75) + 
+    labs(y = "Ширина ДИ, %",
+         x = "Доля для расчёта ДИ") + 
+    theme_bw()
+
+
+```
+
+# "Что лучше?"
+
+## Напишем функцию, которая проводит за нас эксперимент
+
+```{r}
+
+# Представим, что мы проводим эксперимент и сравниваем ИМТ в двух группах пациентов
+# n - количество наблюдений в каждой группе
+# m1, sd1 - среднее арифметическое значение и среднеквадратическое отклонения 
+#           показателя в генеральной совокупности в группе 1
+# m2, sd2 - среднее арифметическое значение и среднеквадратическое отклонения 
+#           показателя в генеральной совокупности в группе 2
+
+experiment_2 <- function(n, m1, sd1, m2, sd2){
+    
+    # Генерируем таблицу с результатами измерений
+    
+    temp_data <- tibble(
+        # Группа
+        group = rep(c(1, 2), each = n) %>% factor(),
+        
+        # Генерируем 2 случайные выборки анализируемого показателя
+        x = c(rnorm(n, m1, sd1),
+              rnorm(n, m2, sd2)) %>% round(1)
+    )
+    
+    # Проводим сравнение количественной переменной
+    t_test_p <- temp_data %>% 
+        t_test(x ~ group, var.equal = T) %>% 
+        pull(p)
+    
+    # Проводим сравнение порядковой переменной
+    u_test_p <- temp_data %>% 
+        mutate(x_ord = case_when(x < 18 ~ 0,
+                                 x < 25 ~ 1,
+                                 x < 30 ~ 2,
+                                 x < 35 ~ 3,
+                                 x < 40 ~ 4,
+                                 x >= 40 ~ 5)) %>% 
+        wilcox_test(x_ord ~ group) %>% 
+        pull(p)
+    
+
+    # Проводим сравнение биномиальной переменной
+    chi_test_p <- temp_data %>% 
+        mutate(x = case_when(x < 30 ~ 0,
+                             x >= 30 ~ 1)) %>%
+        table() %>% 
+        chisq.test() %>% 
+        .$p.value
+    
+    
+    tibble(
+        t_test_p,
+        u_test_p,
+        chi_test_p
+    )
+    
+}
+
+
+```
+
+## А теперь проведём эксперимент много много раз!
+
+```{r}
+
+n <- 64
+m1 <- 29
+m2 <- 31
+sd1 <- sd2 <- 4
+
+series_1 <- lapply(1:100, function(i) experiment_2(n, m1, sd1, m2, sd2)) %>% bind_rows()
+
+series_1 %>% head()
+
+```
+
+## Посчитаем, сколько раз из 100 измерений мы отвергли H0
+
+```{r}
+
+series_1 %>% 
+    summarise(
+        across(
+            where(is.numeric),
+            ~ sum(if_else(.x < 0.05, 1, 0))
+        )
+    )
+
+```
+
+
