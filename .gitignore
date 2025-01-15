@@ -10,3 +10,6 @@
 *.jpeg
 *.pdf
 *.pptx
+
+.obsidian/
+**/.obsidian/
