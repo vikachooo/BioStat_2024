@@ -1,0 +1,88 @@
+---
+title: "Data Management HW"
+author: "Victoria Zaitceva"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(readxl)
+library(openxlsx)
+
+```
+
+
+
+```{r pressure, echo=FALSE}
+
+mh <- read.xlsx("Управление данными/ADaM coding/SDTM/MH_MEDICALHISTORY.xlsx")
+adsl <- read.xlsx("Управление данными/ADaM coding/ADaM-like/ADSL.xlsx")
+
+```
+
+
+
+```{r}
+
+ADMH <- left_join(mh, adsl, by = join_by(STUDYID, SUBJID)) %>%
+  mutate(across(where(is.character), ~ na_if(., ""))) %>% 
+  filter(!is.na(MHTERM) & MHCAT == "Medical History") %>% 
+  mutate(
+    STUDYID = as.character(STUDYID),
+    USUBJID = as.character(USUBJID),
+    TRTP = as.character(TRTP),
+    TRTPN = as.integer(TRTPN),
+    MHSEQ = as.integer(MHSEQ),
+    MHCAT = ifelse(MHCAT == "Medical History", MHCAT, NA),
+    MHTERM = as.character(MHTERM),
+    MHDECOD = as.character(MHDECOD),
+    MHBODSYS = as.character(MHBODSYS),
+    MHSTDTC = as.character(MHSTDTC),
+    
+    # даты
+    ASTDT = case_when(
+      is.na(MHSTDTC) ~ NA_character_,
+      grepl("^\\d{4}-\\d{2}-\\d{2}$", str_trim(MHSTDTC)) ~ format(as.Date(MHSTDTC, format = "%Y-%m-%d"), "%d.%m.%Y"), 
+      grepl("^\\d{4}-\\d{2}$", str_trim(MHSTDTC)) ~ format(as.Date(paste0(MHSTDTC, "-01"), format = "%Y-%m-%d"), "%d.%m.%Y"),  
+      grepl("^\\d{4}$", str_trim(MHSTDTC)) ~ format(as.Date(paste0(MHSTDTC, "-01-01"), format = "%Y-%m-%d"), "%d.%m.%Y"),  
+      TRUE ~ paste("Invalid start date format:", MHSTDTC)
+    ),
+    
+    ASTDTF = case_when(
+      is.na(MHSTDTC) ~ "Y",
+      nchar(MHSTDTC) == 7 ~ "D",
+      nchar(MHSTDTC) == 4 ~ "M",
+      TRUE ~ NA_character_ 
+    ),
+    MHENDTC = as.character(MHENDTC),
+    AENDT = case_when(
+      MHENRTPT == "ONGOING" ~ "", 
+      grepl("^\\d{4}-\\d{2}-\\d{2}$", str_trim(MHENDTC)) ~ format(as.Date(MHENDTC, format = "%Y-%m-%d"), "%d.%m.%Y"),
+      grepl("^\\d{4}-\\d{2}$", str_trim(MHENDTC)) ~ format(as.Date(paste0(MHENDTC, "-01"), format = "%Y-%m-%d"), "%d.%m.%Y"),  
+      grepl("^\\d{4}$", str_trim(MHENDTC)) ~ format(as.Date(paste0(MHENDTC, "-01-01"), format = "%Y-%m-%d"), "%d.%m.%Y"),  
+      TRUE ~ paste("Invalid end date format:", MHENDTC)
+    ),
+    
+    AENDTF = case_when(
+      is.na(MHENDTC) ~ "Y",
+      nchar(MHENDTC) == 7 ~ "D",
+      nchar(MHENDTC) == 4 ~ "M",
+      TRUE ~ NA_character_
+    ),
+
+    MHENRTPT = as.character(MHENRTPT),
+    MHENRF = ifelse(MHENRTPT == "ONGOING", "ONGOING", "")
+  ) %>% select(STUDYID,	USUBJID,	TRTP,	TRTPN,	MHSEQ,	MHCAT,	MHTERM,	MHDECOD,	MHBODSYS,	MHSTDTC,	ASTDT, ASTDTF,	MHENDTC,	AENDT,	AENDTF,	MHENRTPT,	MHENRF) %>%
+  arrange(STUDYID, USUBJID, MHSEQ)
+
+```
+
+
+```{r}
+write.xlsx(ADMH, "Управление данными/ADaM coding/ADaM-like/ADMH.xlsx")
+```
+
+

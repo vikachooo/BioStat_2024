@@ -1,0 +1,325 @@
+---
+title: "ADSL coding"
+author: "Alisa Selezneva"
+date: "2024-10-12"
+output: html_document
+---
+
+<style type="text/css">
+body{
+  font-family: Helvetica;
+  font-size: 12pt;
+}
+/* Headers */
+h1, h2{
+  font-size: 16pt;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+library(openxlsx)
+```
+
+Первым делом подгрузим все нужные нам файлы:
+
+- Population_list.xlsx, 
+
+- DM_DEMOGRAPHICS.xlsx, 
+
+- DS_DISPOSITION.xlsx, 
+
+- SUPPDS_DISPOSITION.xlsx,  
+
+- SU_SUBSTANCEUSE.xlsx,  
+
+- VS_VITALSIGNS.xlsx, 
+
+- EX_EXPOSURE.xlsx
+
+```{r upload}
+
+pop_list <- read.xlsx("./SDTM/Population_list.xlsx")
+
+dem_ds <- read.xlsx("./SDTM/DM_DEMOGRAPHICS.xlsx")
+
+disp_ds <- read.xlsx("./SDTM/DS_DISPOSITION.xlsx")
+
+supp_disp <- read.xlsx("./SDTM/SUPPDS_DISPOSITION.xlsx")
+
+su_ds <- read.xlsx("./SDTM/SU_SUBSTANCEUSE.xlsx")
+
+vs_ds <- read.xlsx("./SDTM/VS_VITALSIGNS.xlsx")
+
+ex_ds <- read.xlsx("./SDTM/EX_EXPOSURE.xlsx")
+
+```
+
+Поработаем с доменом DM, вытащим оттуда переменные:
+
+- STUDYID;
+
+- SUBJID;
+
+- USUBJID;
+
+- SITEID;
+
+- ARM;
+
+- TRTP;
+
+- TRTPN;
+
+```{r dm}
+sl_ds <- 
+  dem_ds %>% 
+  select(STUDYID, SUBJID, SITEID, 
+         AGE, AGEU, 
+         SEX, RACE, 
+         ARM) %>% 
+  mutate(SITEID = as.character(SITEID), 
+         USUBJID = paste(STUDYID, SUBJID, sep = '-'),
+         AGE = as.numeric(AGE),
+         TRTP = ARM,
+         TRTPN = c(1,2)[match(TRTP, c("XXXX0", "XXXX1"))])
+```
+
+Согласно спецификации, у нас есть ряд важных дат или связанных с ними значений:
+
+- RFICDT;
+
+- RANDDT;
+
+- TRTSDT;
+
+- TRTEDT;
+
+- TRTDURD;
+
+- EOSDT;
+
+Получим из домена DS RFICDT, RANDDT, EOSDT:
+
+```{r ds_dates}
+dates_ds <- 
+  disp_ds %>% 
+  select(SUBJID, DSSEQ, DSSTDTC) %>% 
+  mutate(DSSTDTC = format(as.Date(DSSTDTC, 
+                                  format = "%Y-%m-%d"), 
+                          "%d.%m.%Y")) %>% 
+  pivot_wider(names_from = DSSEQ, 
+              values_from = DSSTDTC) %>%
+  select(SUBJID, RFICDT = '1', RANDDT = '2', EOSDT = '3')
+```
+
+Из домена EX выудим TRTSDT, TRTEDT, TRTDURD:
+
+```{r trt_dates}
+trt_dates <- ex_ds %>% 
+  group_by(SUBJID) %>% 
+  mutate(N = length(EXSEQ[EXOCCUR == 'Yes' & 
+                            !is.na(EXOCCUR)]),
+         L = last(EXSEQ[EXOCCUR == 'Yes' & 
+                          !is.na(EXOCCUR)])) %>% 
+  ungroup() %>% 
+  mutate(TYPE = ifelse(EXSEQ == 1, 'TRTSDT',
+                       ifelse(EXSEQ == L, 'TRTEDT', '')),
+         EXSTDTC = format(as.Date(EXSTDTC, 
+                                  format = "%Y-%m-%d"), 
+                          "%d.%m.%Y")) %>% 
+  filter(TYPE != '') %>% 
+  select(SUBJID, EXSTDTC, TYPE) %>% 
+  spread(TYPE, EXSTDTC)
+
+trt_dates <- left_join(trt_dates, dates_ds) 
+
+trt_dates <- trt_dates %>% 
+  mutate(TRTDURD = as.numeric(as.Date(TRTEDT, 
+                           format = "%d.%m.%Y") - as.Date(TRTSDT, 
+                                                          format = "%d.%m.%Y")))
+
+
+```
+
+Соберем измерения по субъектам исследования:
+
+- WEIGHT;
+
+- WEIGHTU;
+
+- HEIGHT;
+
+- HEIGHTU;
+
+- BMI;
+
+- BMIU;
+
+
+```{r vs}
+vs_res <- 
+  vs_ds %>% 
+  filter(VISIT == 'Visit 0', 
+         VSSEQ %in% c('1','2','3')) %>% 
+  select(SUBJID, VSTEST, VSORRES) %>% 
+  pivot_wider(names_from = VSTEST, 
+              values_from = VSORRES) %>%
+  rename(WEIGHT = Weight,
+         HEIGHT = Height)
+
+vs_u <- 
+  vs_ds %>% 
+  filter(VISIT == 'Visit 0', 
+         VSSEQ %in% c('1','2','3')) %>% 
+  select(SUBJID,VSTEST, VSORRESU) %>% 
+  pivot_wider(names_from = VSTEST, 
+              values_from = VSORRESU) %>%
+  rename(WEIGHTU = Weight,
+         HEIGHTU = Height,
+         BMIU = BMI)
+
+vs_ds <- left_join(vs_res, vs_u)
+```
+
+Теперь информация по курению и алкоголю:
+
+```{r su}
+su_ds <- 
+  su_ds %>% 
+  select(SUBJID, SUCAT, SUDOSTXT) %>% 
+  pivot_wider(names_from = SUCAT, values_from = SUDOSTXT) %>% 
+  rename(SMOKSTAT = 'Tobacco Use', ALCSTAT = 'Alcohol Use')
+```
+
+Важная информация, которую мы будем предоставлять -- это статус пациента в исследовании.
+
+Например, субъект мог выбыть из исследования по различным причинам.
+
+Вытащим эту информацию из домена suppds.
+
+```{r do_dc_reas}
+doreas <- 
+  supp_disp %>% 
+  filter(DSSEQ == 2) %>% 
+  mutate(DOREAS = DSREAS) %>% 
+  select(SUBJID, DOREAS, DSSTATUS, RANDID = DSNUM)
+
+dcsreas <- 
+  supp_disp %>% 
+  filter(DSSEQ == 3) %>% 
+  mutate(DCSREAS = DSREAS) %>% 
+  select(SUBJID, DCSREAS)
+
+do_dc_ds <- left_join(doreas, dcsreas)
+
+```
+
+Важная и очень удобная часть ADaM-датасетов -- это флаги популяций.
+
+- FASFL;
+
+- FASXL;
+
+- PPROTFL;
+
+- PPXL;
+
+- SAFFL;
+
+- SAFXL;
+
+- RANDFL;
+
+- COMPLFL.
+
+
+```{r flags}
+compl_fl <- supp_disp %>% 
+  filter(DSSEQ == "3") %>%
+  mutate(COMPLFL = ifelse(
+    (grepl('Subject discontinued the study', DSSTATUS)), 
+    'N', 'Y')) %>% 
+  select(SUBJID, COMPLFL)
+
+colnames(pop_list) <- c('STUDYID', 'SUBJID', 
+                        'STATUS', 'RANDN', 
+                         'PP', 'PPXL', 
+                         'FAS',	'FASXL', 
+                         'SAF', 'SAFXL')
+pop_list <- pop_list %>%
+  mutate_at(vars(PP, FAS, SAF), str_to_title)
+
+pop_list <- pop_list %>% 
+  mutate(PPROTFL = if_else(PP == 'Yes', 'Y', 'N'),
+         FASFL = if_else(FAS == 'Yes', 'Y', 'N'),
+         SAFFL = if_else(SAF == 'Yes', 'Y', 'N')
+         ) %>% 
+  select(SUBJID, 
+         PPROTFL, PPXL,
+         FASFL, FASXL,
+         SAFFL, SAFXL)
+
+```
+
+Сджойним нужные нам датафреймы:
+
+```{r joins}
+ADSL <- left_join(sl_ds, pop_list)
+ADSL <- left_join(ADSL, do_dc_ds)
+ADSL <- left_join(ADSL, trt_dates)
+ADSL <- left_join(ADSL, su_ds)
+ADSL <- left_join(ADSL, compl_fl)
+ADSL <- left_join(ADSL, vs_ds)
+```
+
+Не хватает одного флага -- флага рандомизации:
+
+```{r rand}
+ADSL <- ADSL %>% 
+  mutate(RANDFL = ifelse(is.na(RANDDT), 'N', 'Y'))
+```
+
+Очень важно при конструировании ADSL проверять, что у нас:
+
+а) есть все необходимые переменные;
+
+б) они имеют корректные типы! 
+
+в) и корректные форматы.
+
+```{r adsl}
+ADSL <- ADSL %>%
+  select(STUDYID, SUBJID, USUBJID, SITEID,
+         ARM, TRTP, TRTPN,
+         RFICDT, RANDDT, TRTSDT, TRTEDT, TRTDURD, EOSDT,
+         AGE, AGEU,
+         SEX, RACE,
+         WEIGHT, WEIGHTU,
+         HEIGHT, HEIGHTU,
+         BMI, BMIU,
+         SMOKSTAT, ALCSTAT, 
+         DOREAS, DCSREAS,
+         FASFL, FASXL,
+         PPROTFL, PPXL,
+         SAFFL, SAFXL,
+         RANDFL, COMPLFL)
+
+ADSL <- ADSL %>%
+  mutate_at(vars(TRTPN, TRTDURD,
+                 AGE, WEIGHT, HEIGHT,
+                 BMI), as.numeric) %>%
+  mutate(WEIGHT = round(WEIGHT, digits = 1),
+         BMI = round(BMI, digits = 2),
+         HEIGHT = ceiling(HEIGHT))
+  
+```
+
+
+
+```{r}
+write.xlsx(ADSL, "./ADaM-like/ADSL.xlsx")
+```
+
