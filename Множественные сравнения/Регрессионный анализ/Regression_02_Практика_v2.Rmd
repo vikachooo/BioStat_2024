@@ -1,0 +1,599 @@
+---
+title: "Регрессионный анализ"
+subtitle: "Логистическая регрессия"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float: true
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+library(tidyverse)
+library(gtsummary)
+library(broom)
+library(broom.helpers)
+library(forestmodel)
+library(ggResidpanel)
+library(lmtest)
+library(car)
+library(emmeans)
+library(patchwork)
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, error = FALSE)
+```
+
+## **Данные**
+
+#### **Pima Indians Diabetes**
+
+```{r}
+# Corrected version of Pima Indians women dataset
+# https://search.r-project.org/CRAN/refmans/mlbench/html/PimaIndiansDiabetes.html
+pima <- read.csv("pima.csv") %>% 
+  mutate(pregnant = factor(pregnant > 0, labels = c("0", ">0")),
+         mass_group = cut(mass, c(18,25,30,35,40,70), right = FALSE, 
+                          include_lowest = TRUE),
+         diabetes = factor(diabetes, c("neg", "pos")))
+
+pima %>% head()
+```
+
+**Описательная статистика**
+
+```{r}
+tbl_summary(
+  pima, by = diabetes,
+  type = list(all_continuous() ~ "continuous2"),
+  statistic = list(
+    all_continuous() ~ c("{N_nonmiss}", "{mean} ({sd})", "{median} ({p25}-{p75})", "{min}-{max}")
+  )) %>%
+  modify_footnote(everything() ~ NA) %>%
+  bold_labels()
+```
+
+<br>
+
+### **Логистическая и логит-функции**
+
+- `qlogis` может использоваться для оценки логита (логарифма отношения шансов) для данной вероятности события
+
+- `plogis` может использоваться для оценки логистической функции от любого значения
+
+```{r}
+df_log <- tibble(
+  p = seq(0,1,0.1),
+  logit = qlogis(p),
+  logistic = plogis(logit)
+)
+
+df_log
+```
+
+<br>
+
+Диаграмма рассеяния с логистической функцией:
+
+(нужно зависимую переменную перевести в numeric со значениями 0 и 1)
+
+```{r}
+ggplot() +
+  geom_point(aes(x = glucose, y = diabetes), 
+             pima %>% mutate(diabetes = as.numeric(diabetes)-1)) +
+  geom_smooth(aes(x = glucose, y = diabetes), 
+              pima %>% mutate(diabetes = as.numeric(diabetes)-1), 
+              method = glm, method.args = list(family = binomial),
+              color = "red", se = FALSE) +
+  theme_bw()
+```
+
+<br>
+
+## **Оценка логистической регрессии**
+
+- `glm(formula, data, family = binomial)`, где `formula` и `data` -- аналогичны линейной регрессии, но в формуле в левой части должна стоять бинарная переменная (закодирована либо как 0/1, либо как фактор, у которого вторым уровнем будет интересующее нас событие)
+
+```{r}
+glm_fit <- glm(diabetes ~ age + glucose + insulin + mass + pregnant + pedigree, 
+               pima,
+               family = binomial)
+
+glm_fit
+coef(glm_fit)
+```
+
+Что есть в объекте `glm`, помимо знакомого по `lm`:
+
+- `fitted.values` -- значения условной вероятности события для каждого наблюдения, включенного в оценку модели
+
+- `linear.predictors` -- значение линейного предиктора для каждого наблюдения, включенного в оценку модели (т.е. логита)
+
+- В листе `family` хранится линк- и обратная линк-функции -- если вы вдруг забыли формулы для соответствующей обобщенной линейной модели, которую оценили, можно их использовать: линк-функция (`glm_fit$family$linkfun`) позволит перевести значения `fitted.values` в логит (логарифм шанса события), а обратная линк-функция (`glm_fit$family$linkinv`) -- наоборот, переведет значение линейного предиктора (логарифм шанса события) в вероятность события:
+
+```{r}
+glm_fit$fitted.values %>% head()
+glm_fit$family$linkinv(glm_fit$linear.predictors) %>% head()
+
+glm_fit$linear.predictors %>% head()
+glm_fit$family$linkfun(glm_fit$fitted.values) %>% head()
+
+glm_fit$family$linkinv(0.5)
+plogis(0.5)
+```
+
+<br>
+
+### **Диагностика**
+
+**Проверка формы зависимости логита от $X$ на линейность**:
+
+- Проще всего это сделать, построив график для эмпирического `logit` vs $X$ и визуально оценить возможную нелинейность по $X$:
+
+```{r}
+df_check <- glm_fit %>% broom::augment() %>% 
+  dplyr::select(-starts_with("."), .fitted) %>% 
+  dplyr::select(where(is.numeric)) %>% 
+  pivot_longer(-.fitted) %>% 
+  rename(logit = .fitted)
+  
+ggplot() +
+  geom_point(aes(x = value, y = logit), df_check) +
+  geom_smooth(aes(x = value, y = logit), df_check, color = "red", se = FALSE) +
+  facet_wrap(~ name, scales = "free") +
+  theme_bw()
+```
+
+- Или воспользовавшись функцией `car::residualsPlot` -- график "остатки Пирсона vs $X$" + в консоли выводит результаты теста на равенство нулю коэффициента при квадрате соответствующей переменной при ее добавлении в регрессию: 
+
+```{r, fig.width=8, fig.height=8}
+car::residualPlots(glm_fit, terms = ~ . - pregnant)
+```
+
+<br>
+
+**Мультиколлинеарность**:
+
+- `car::vif` или `performace::multicollinearity`
+
+```{r}
+car::vif(glm_fit)
+```
+
+<br>
+
+**Выбросы**:
+
+- аналогично линейной модели: например, по расстоянию Кука, которое покажет, на сколько изменится log(odds) после удаления из выборки соответствующего наблюдения (тут можно воспользоваться и графической диагностикой, и оценкой расстояния по каждому наблюдению с помощью функций `influence.measures` или `broom::augment`)
+
+```{r, fig.width=8, fig.height=4}
+resid_panel(glm_fit, plots = c("lev", "cookd"))
+```
+
+<br>
+
+### **Коэффициенты, их SE, ДИ, тесты**
+
+По умолчанию `summary` приводит значения коэффициентов в единицах log(odds), т.е. в логитах. Также по умолчанию используется тест Вальда для нулевой гипотезы о равенстве этих коэффициентов нулю (т.е. о равенстве отношений шансов единице).
+
+Экспонированные значения коэффициентов (отношения шансов, константу обычно опускают, когда приводят их):
+
+```{r}
+exp(coef(glm_fit))[-1]
+glm_fit %>% 
+  broom.helpers::tidy_and_attach(exp = TRUE) %>% 
+  broom.helpers::tidy_add_reference_rows() %>% 
+  broom.helpers::tidy_remove_intercept() %>% 
+  broom.helpers::tidy_add_term_labels() %>% 
+  broom.helpers::tidy_add_n() %>% 
+  transmute(Variable = ifelse(is.na(contrasts), var_label, 
+                              sprintf("%s - %s", var_label, label)),
+            `% with diabetes (n/N)` = sprintf("%.1f%% (%d/%d)",
+                                               n_event/n_obs*100, n_event, n_obs),
+            `OR [95% CI]` = ifelse(is.na(estimate), "Ref.",
+                                   sprintf("%.3f [%.3f-%.3f]", estimate, 
+                                           conf.low, conf.high)),
+            `p-value` = gtsummary::style_pvalue(p.value, 3))
+  
+```
+
+```{r}
+tbl_regression(glm_fit, exponentiate = TRUE)
+```
+
+<br>
+
+Представление результатов в виде форест-плота (на примере функции из пакета [`forestmodel`](https://shixiangwang.github.io/forestmodel/index.html)). Для этих же целей можно посмотреть пакет `forestplot` или посмотреть [пример](https://www.khstats.com/blog/forest-plots/), как это можно сделать с помощью `ggplot`:
+
+```{r}
+forest_model(glm_fit)
+```
+
+<br>
+
+Обратите внимание на то, что все эти функции (и `confint`, в том числе) по умолчанию строят profile likelihood доверительные интервалы для оценок коэффициентов, а не ДИ Вальда, при этом p-значения и z-статистики приводятся именно для теста Вальда. В связи с этим в некоторых случаях может получиться так, что у вас ДИ для отношения шансов чуть-чуть пересекает единицу, но при этом p < 0.05 или наоборот. Чтобы получить ДИ Вальда, нужно использовать функцию `confint.default`. Сравните:
+
+```{r}
+confint(glm_fit)
+confint.default(glm_fit)
+```
+
+Поскольку в этом случае регрессия оценивалась по достаточно большому объему выборки, событий было относительно много, не было такого, чтобы события встречались только у женщин с какими-то определенными характеристиками (например, не было такого, что диабет, в основном, встречался бы только у женщин с опытом беременности или только у женщин с большим ИМТ), оба интервала примерно одинаковые. 
+
+Использование profilt likelihood интервалов по умолчанию (тут, конечно, есть такая странность, что по умолчанию используется как раз не функция `confint.default`, как можно было бы ожидать, а `confint`) связано с тем, что при относительно небольшом объеме выборки, в случае редких событий или редких категорий категориального предиктора или концентрации событий в группе наблюдений с определенными характеристиками из числа включенных в число независимых переменных) ДИ Вальда начинают плохо работать (мы не можем надеяться на то, что их покрытие действительно составляет 95% -- по факту меньше).
+
+При этом profile likelihood интервалы могут долго считаться, если выборка большая/ много предикторов в модели.
+
+Чтобы в `broom::tidy` вывести ДИ Вальда:
+
+```{r}
+dplyr::bind_cols(
+    broom::tidy(glm_fit, exponentiate = TRUE, conf.int = FALSE),
+    broom::confint_tidy(glm_fit, func = stats::confint.default)
+  )
+```
+
+Можно "вписать" эту функцию и в `tbl_regression` - см.пример [здесь](https://github.com/ddsjoberg/gtsummary/issues/229).
+
+Если вы, наоборот, хотите к profile likelihood интервалам добавить результаты для соответствующего им likelihood ratio теста для коэффициентов, то тут можно воспользоваться функцией `Anova` из пакета `car` с аргументами `type = 3` и `test.statistic = "LR"`:
+
+```{r}
+car::Anova(glm_fit, type = 3, test.statistic = "LR")
+```
+
+Подробнее о различных тестах для коэффициентов логистической регрессии можно почитать [здесь](https://stats.oarc.ucla.edu/other/mult-pkg/faq/general/faqhow-are-the-likelihood-ratio-wald-and-lagrange-multiplier-score-tests-different-andor-similar/) или в книге Harrell. Regression Modeling Strategies (кратко -- [тут](https://hbiostat.org/rmsc/lrm.html#test-statistics)).
+
+<br>
+
+Условное мат.ожидание, для которого мы изначально хотели оценить модель, -- это вероятность диабета. Получить ее оценку для каждого пациента в выборке можно с помощью функции `predict` с аргументом `type = "response` (если его не указать, по умолчанию посчитает для `type = link`, т.е. значение линейного предиктора/ логита/ логарифма шанса диабета):
+
+```{r}
+predict(glm_fit, type = "response") %>% head()
+predict(glm_fit) %>% head()
+predict(glm_fit) %>% glm_fit$family$linkinv() %>% head()
+```
+
+Со стандартными ошибками:
+
+```{r}
+broom::augment(glm_fit, type.predict = "response", se_fit = TRUE) %>% 
+  dplyr::select(-.rownames, -.resid, -.hat, -.sigma, -.cooksd, -.std.resid)
+```
+
+Можно рассчитать условное мат.ожидание для интересующего вас набора значений независимых переменных, добавив их в виде датафрейма в аргумент `newdata` (должны присутствовать столбцы для всех независимых переменных).
+
+Либо можно оценить log(odds) или условную вероятность диабета при средних значениях количественных ковариат по группам категориальных предикторов с помощью функции `emmeans` из одноименного пакета (эта функция, в отличие от `predict`, также оценивает и асимптотический доверительный интервал):
+
+```{r}
+emmeans::emmeans(glm_fit, ~ age + glucose + insulin + mass + pedigree | pregnant)
+emmeans::emmeans(glm_fit, ~ age + glucose + insulin + mass + pedigree | pregnant,
+                 type = "response")
+```
+
+Если некоторые ковариаты хафиксировать на среднем уровне, а другие задать самим:
+
+```{r}
+emmeans_age <- emmeans::emmeans(
+  glm_fit, ~ age + glucose + insulin + mass + pedigree | pregnant,
+  at = list(age = c(25,26)), type = "response") %>% 
+  broom::tidy()
+
+emmeans_age
+```
+
+По последним результатам можно проверить формулу для примерной оценки изменения вероятности события при увеличении количественной переменной (в нашем примере -- возраста) на 1:
+
+```{r}
+sprintf("Сравните: формула = %.5f, emmeans: %.5f", 
+        coef(glm_fit)[["age"]] * emmeans_age$prob[1] * (1 - emmeans_age$prob[1]),
+        emmeans_age$prob[2] - emmeans_age$prob[1])
+
+sprintf("Сравните: формула = %.5f, emmeans: %.5f", 
+        coef(glm_fit)[["age"]] * emmeans_age$prob[3] * (1 - emmeans_age$prob[3]),
+        emmeans_age$prob[4] - emmeans_age$prob[3])
+```
+
+<br>
+
+Тест на одновременное равенство нулю всех коэффициентов (likelihood ratio test):
+
+```{r}
+lmtest::lrtest(glm_fit)
+```
+
+Тест на одновременное равенство нулю нескольких коэффициентов (Wald test):
+
+```{r}
+glm_fit3 <- glm(diabetes ~ age + glucose + mass_group, pima, family = binomial())
+
+car::linearHypothesis(glm_fit3, names(coef(glm_fit3))[grepl("mass", names(coef(glm_fit3)))])
+```
+
+<br>
+
+### **Полином в логистической регрессии**
+
+```{r}
+glm_fit_sq <- update(glm_fit, .~. + I(age^2))
+summary(glm_fit_sq)
+```
+
+Тест отношения правдоподобия для гипотезы о равенсте нулю эффекта возраста:
+
+```{r}
+lrtest(update(glm_fit_sq, .~. - age - I(age^2)), glm_fit_sq)
+```
+
+<br>
+
+Пусть beta1 -- это коэффициент при переменной `age`, а beta2 -- коэффициент при ее квадрате.
+
+При прочих равных, log(odds) = beta1 \* age + beta2 \* age^2 
+
+- Для всех возрастов от минимального до максимального найдем log(odds), которые добавляет возраст к правой части логистической регрессии
+
+- Затем представим, что все остальные характеристики являются одинаковыми -- тогда можем найти log(OR) при любом возрасте по сравнению с любым другим (например, со средним по выборке), при прочих равных условиях (просто как разницу соответствующих log(odds), добавленных возрастом)
+
+- Взяв экспоненту от log(OR) найдем OR (отношение шансов) диабета при любом возрасте по сравнению со средним возрастом и при прочих равных условиях
+
+Полученные графики (первая строка) будут иметь такую форму, независимо от того, по сравнению с каким возрастом вы для них оцените отношение шансов -- только точка для logOR = 0 (OR = 1) будет иметь по X координату, соответствующую выбранному вами возрасту.
+
+- Чтобы посчитать logOR при увеличении возраста на 1 год, достаточно вспомнить формулу, которая приводилась для полиномов 2 степени в лекции по обыкновенной линейной регрессии: beta1 + beta2 \* (2 * age + 1) -- таким образом, logOR при увеличении возраста на 1 год будет зависеть от того возраста, с которого произошло увеличение
+
+- Отношение шансов диабета при увеличении возраста на 1 год -- экспонента в степени logOR, почитанного на предыдущем шаге -- также будет зависеть от возраста, но нелинейно
+
+Обратите внимание на то, что точка перегиба для logOR и OR по сравнению с выбранным возрастом будет находиться там, где logOdds при увеличении возраста на 1 год будет равно 0 (OR при увеличении возраста на 1 год будет равно 1). До этого возраста, в среднем, шанс диабета с каждым годом возраста возрастает, а затем убывает, при прочих равных условиях. Найдем эту точку:
+
+beta1 + beta2 \* (2 \* age + 1) = 0
+
+age = - (beta1 + beta2)/(2 \* beta2)
+
+```{r, fig.width=8, fig.height=6}
+age_mean <- round(mean(pima$age))
+age_curv <- - (coef(glm_fit_sq)[["age"]] + coef(glm_fit_sq)[["I(age^2)"]]) /
+  (2 * coef(glm_fit_sq)[["I(age^2)"]])
+
+df_sq <- tibble(age = seq(min(pima$age), max(pima$age), 1),
+                logOdds = coef(glm_fit_sq)[["age"]]*age + 
+                  coef(glm_fit_sq)[["I(age^2)"]]*age^2,
+                logOR = logOdds - logOdds[age == age_mean],
+                OR = exp(logOR),
+                logOR_1 = logOdds - lag(logOdds),
+                OR_1 = exp(logOR_1))
+
+p1 <- ggplot() +
+  geom_line(aes(x = age, y = logOR), df_sq, linewidth = 1) + 
+  geom_segment(aes(x = age_mean, xend = age_mean, y = 0, yend = -Inf),
+               color = "red", linetype = "dashed") + 
+  geom_segment(aes(x = -Inf, xend = age_mean, y = 0, yend = 0),
+               color = "red", linetype = "dashed") + 
+  geom_segment(aes(x = age_curv, xend = age_curv, yend = -Inf, 
+                   y = coef(glm_fit_sq)[["age"]]*age_curv + 
+                     coef(glm_fit_sq)[["I(age^2)"]]*age_curv^2 -
+                     df_sq$logOdds[df_sq$age == age_mean]),
+               color = "blue", linetype = "dashed") + 
+  labs(y = "logOR in comp.to\nmean age") +
+  theme_bw()
+
+p2 <- ggplot() +
+  geom_line(aes(x = age, y = OR), df_sq, linewidth = 1) + 
+  geom_segment(aes(x = age_mean, xend = age_mean, y = 1, yend = -Inf),
+               color = "red", linetype = "dashed") + 
+  geom_segment(aes(x = -Inf, xend = age_mean, y = 1, yend = 1),
+               color = "red", linetype = "dashed") + 
+  geom_segment(aes(x = age_curv, xend = age_curv, yend = -Inf, 
+                   y = exp(coef(glm_fit_sq)[["age"]]*age_curv + 
+                     coef(glm_fit_sq)[["I(age^2)"]]*age_curv^2 -
+                     df_sq$logOdds[df_sq$age == age_mean])),
+               color = "blue", linetype = "dashed") + 
+  labs(y = "OR in comp.to\nmean age") + 
+  theme_bw()
+
+p3 <- ggplot() +
+  geom_line(aes(x = age, y = logOR_1), df_sq, linewidth = 1) + 
+  geom_segment(aes(x = age_curv, xend = age_curv, 
+                   yend = -Inf,  y = 0),
+               color = "blue", linetype = "dashed") + 
+  geom_segment(aes(x = -Inf, xend = age_curv, y = 0, yend = 0),
+               color = "blue", linetype = "dashed") + 
+  labs(y = "logOR in comp.to\nminus 1 year") +
+  theme_bw()
+
+p4 <- ggplot() +
+  geom_line(aes(x = age, y = OR_1), df_sq, linewidth = 1) + 
+  geom_segment(aes(x = age_curv, xend = age_curv, 
+                   yend = -Inf,  y = 1),
+               color = "blue", linetype = "dashed") + 
+  geom_segment(aes(x = -Inf, xend = age_curv, y = 1, yend = 1),
+               color = "blue", linetype = "dashed") + 
+  labs(y = "OR in comp.to\nminus 1 year") +
+  theme_bw()
+
+(p1 + p2) / (p3 + p4)
+```
+
+Тот же самый график для logOR по сравнению со средним возрастом в выборке, по которой оценивалась регрессия, можно получить с помощью функции `emmeans::emmip` (с аргументом `plotit = FALSE` выдаст результат в виде датафрейма, если `TRUE` -- нарисует график)
+
+```{r}
+age_mean_glm <- mean(glm_fit$model$age)
+
+df_sq2 <- emmip(glm_fit_sq, ~ age, 
+                at = list(age = seq(min(pima$age), max(pima$age), 1)), 
+                plotit = FALSE) %>% 
+  rename(logOR = yvar) %>% 
+  mutate(OR = exp(logOR))
+
+emmip(glm_fit_sq, ~ age, at = list(age = seq(min(pima$age), max(pima$age), 1)),
+      linearg = list(linewidth = 1)) +
+  theme_bw()
+```
+
+Кроме того, если в ту же функцию `emmip` подать аргумент `type = "response"`, то получим данные/ график по условной вероятности диабета в зависимости от возраста -- при этом важно понимать, что все остальные количественные ковариаты фиксируются функцией на уровне их средних по оцениваемому датасету, а для факторов рассчитывается среднее арифметическое из предсказываемых значений линейного предиктора (log(odds)) при каждом уровне фактора и соответствующих значениях количественных предикторов. Подробнее про то, как с помощью `emmeans` и `marginaleffects` можно рассчитывать подобные вещи можно почитать [здесь](https://www.andrewheiss.com/blog/2022/05/20/marginalia/) (применимо для широкого круга моделей -- не только glm).
+
+```{r}
+emmip(glm_fit_sq, ~ age, type = "response",
+      at = list(age = seq(min(pima$age), max(pima$age), 1)),
+      linearg = list(linewidth = 1)) +
+  theme_bw()
+
+emmip(glm_fit_sq, ~ age | pregnant, type = "response", 
+      at = list(age = seq(min(pima$age), max(pima$age), 1)),
+      linearg = list(linewidth = 1)) +
+  theme_bw()
+```
+
+Посмотреть, какие значения берутся по умолчанию для количественных предикторов, если их не указать в `at`:
+
+```{r}
+ref_grid(glm_fit_sq)
+```
+
+<br>
+
+### **Эффекты пересечения в логистической регрессии**
+
+```{r}
+glm_fit_int <- update(glm_fit, .~. + pregnant*age)
+
+summary(glm_fit_int)
+```
+
+Тест отношения правдоподобия для гипотезы о равенсте нулю эффекта возраста:
+
+```{r}
+lrtest(update(glm_fit_int, .~. - age - pregnant*age), glm_fit_int)
+```
+
+Тест отношения правдоподобия для гипотезы о равенсте нулю эффекта опыта беременности:
+
+```{r}
+lrtest(update(glm_fit_int, .~. - pregnant - pregnant*age), glm_fit_int)
+```
+
+<br>
+
+Эффект возраста в отношении log(odds) для каждой группы по опыту беременности, при прочих равных условиях:
+
+```{r}
+emmeans::emtrends(glm_fit_int, ~ pregnant, var = "age")
+```
+
+То же в виде отношений шансов диабета (при увеличении возраста на 1 год):
+
+```{r}
+emmeans::emtrends(glm_fit_int, ~ pregnant, var = "age") %>% 
+  broom::tidy() %>% 
+  mutate(across(c(age.trend, ends_with("CL")), ~ exp(.x)))
+```
+
+Различия между группами по опыту беременности при среднем по выборке возрасте (в виде отношения шансов диабета):
+
+```{r}
+emmeans::emmeans(glm_fit_int, pairwise ~ pregnant | age, type = "response")
+```
+
+Различия между группами по опыту беременности при интересующих нас возрастах (в виде отношения шансов диабета):
+
+```{r}
+emmeans::emmeans(glm_fit_int, pairwise ~ pregnant | age, 
+                 at = list(age = c(25,35,45,55)),
+                 type = "response")
+```
+
+С каждым годом возраста отношение шансов диабета в группе женщин с опытом беременности по сравнению с женщинами без опыта беременности возрастает в (см. ниже) раз:
+
+```{r}
+exp(coef(glm_fit_int)[["age:pregnant>0"]])
+```
+
+<br>
+
+Зависимость log(odds), добавляемых в правую часть возрастом и опытом беременности, от возраста, по опыту беременности:
+
+```{r}
+# в виде датафрейма
+df_fit_int <- emmeans(glm_fit_int, ~ age | pregnant, 
+                      at = list(age = seq(min(pima$age), max(pima$age), 1))) %>% 
+  broom::tidy()
+
+# в виде графика
+emmip(glm_fit_int, pregnant ~ age, 
+      at = list(age = seq(min(pima$age), max(pima$age), 1)),
+      linearg = list(linewidth = 1)) +
+  theme_bw()
+```
+
+Зависимость вероятности диабета от возраста, по опыту беременности (остальные ковариаты фиксированы на их среднем по оцениваемой выборке значениям):
+
+```{r}
+# в виде датафрейма
+df_p_int <- emmeans(glm_fit_int, ~ age | pregnant, type = "response",
+                    at = list(age = seq(min(pima$age), max(pima$age), 1))) %>% 
+  broom::tidy()
+
+# в виде графика
+emmip(glm_fit_int, pregnant ~ age, type = "response",
+      at = list(age = seq(min(pima$age), max(pima$age), 1)),
+      linearg = list(linewidth = 1)) +
+  theme_bw()
+```
+
+В качестве эксперимента введем эффект пересечения возраста и опыта беременности в модель с квадратом возраста:
+
+```{r}
+glm_fit_int2 <- update(glm_fit, .~. + I(age^2) + pregnant*age + pregnant*I(age^2))
+
+summary(glm_fit_int2)
+```
+
+Зависимость log(odds), добавляемых в правую часть ворастом и опытом беременности, от возраста, по опыту беременности:
+
+```{r}
+# в виде датафрейма
+df_fit_int2 <- emmeans(glm_fit_int2, ~ age | pregnant, 
+                       at = list(age = seq(min(pima$age), max(pima$age), 1))) %>% 
+  broom::tidy()
+
+# в виде графика
+emmip(glm_fit_int2, pregnant ~ age, 
+      at = list(age = seq(min(pima$age), max(pima$age), 1)),
+      linearg = list(linewidth = 1)) +
+  theme_bw()
+```
+
+Зависимость вероятности диабета от возраста, по опыту беременности (остальные ковариаты фиксированы на их среднем по оцениваемой выборке значениям):
+
+```{r}
+# в виде датафрейма
+df_p_int2 <- emmeans(glm_fit_int2, ~ age | pregnant, type = "response",
+                     at = list(age = seq(min(pima$age), max(pima$age), 1))) %>% 
+  broom::tidy()
+
+# в виде графика
+emmip(glm_fit_int2, pregnant ~ age, type = "response",
+      at = list(age = seq(min(pima$age), max(pima$age), 1)),
+      linearg = list(linewidth = 1)) +
+  theme_bw()
+```
+
+<br>
+
+### **Логистическая регрессия vs статистические тесты**
+
+Парная логистическая регрессия с тестом Вальда для коэффициентов при бинарном предикторе vs тест Хи-квадрат для таблиц сопряженности:
+
+```{r}
+glm_fit2 <- glm(diabetes ~ pregnant, pima, family = binomial)
+broom::tidy(glm_fit2, exp = TRUE, conf.int = TRUE)
+
+chisq.test(table(pima$pregnant, pima$diabetes), correct = FALSE)
+epitools::oddsratio.wald(table(pima$pregnant, pima$diabetes))
+```
+
+```{r}
+glm_fit3 <- glm(diabetes ~ mass_group, pima, family = binomial)
+broom::tidy(glm_fit3, exp = TRUE, conf.int = TRUE)
+
+epitools::oddsratio.wald(table(pima$mass_group, pima$diabetes))
+```

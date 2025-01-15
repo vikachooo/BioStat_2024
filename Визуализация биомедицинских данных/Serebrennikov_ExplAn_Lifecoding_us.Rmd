@@ -1,0 +1,185 @@
+---
+title: 'Our solutions'
+author: "Дмитрий Серебренников"
+output: 
+  html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Загрузим данные и пакеты
+
+```{r}
+library(tidyverse)
+theme_set(theme_minimal())
+```
+
+...
+
+[Body Fat Prediction Dataset](https://www.kaggle.com/datasets/fedesoriano/body-fat-prediction-dataset).
+
+Variables:
+
+1. Density determined from underwater weighing
+2. Percent body fat from Siri's (1956) equation
+3. Age (years)
+4. Weight (lbs)
+5. Height (inches)
+6. Neck circumference (cm)
+7. Chest circumference (cm)
+8. Abdomen 2 circumference (cm)
+9. Hip circumference (cm)
+10. Thigh circumference (cm)
+11. Knee circumference (cm)
+12. Ankle circumference (cm)
+13. Biceps (extended) circumference (cm)
+14. Forearm circumference (cm)
+15. Wrist circumference (cm)
+
+```{r}
+df <- read.csv('data/bodyfat.csv')
+```
+
+
+# Эксплораторный анализ
+
+```{}
+ЗАДАНИЕ: Проведите эксплораторный анализ данных bodyfat за 25 минут. Вы вольны самостоятельно решить какой стратегией пойти, но напомню, что сначала вы должны проанализировать общую структуру данных датасета (как строк, так и колонок), а потом можете сосредоточиться на одном сюжете и детально рассмотреть его.
+
+NB: Поскольку мы учимся *эксплораторному анализу* не предполагается, что вы будете использовать статистические тесты и моделирование.
+```
+
+Решение написать в чанке ниже и прислать в зум-чат по истечению времени:
+
+
+```{r}
+summary(df)
+```
+
+
+```{r}
+glimpse(df)
+```
+```{r}
+
+df |>
+  skimr::skim()
+```
+```{r}
+boxplot(scale(df))
+```
+
+
+```{r}
+library(ggpubr)
+
+
+# Define the variables and initialize the list to store plots
+vars <- colnames(df)
+plot_list <- vector("list", length(vars))
+
+# Create each plot and store in plot_list using index
+for (i in seq_along(vars)) {
+  var <- vars[i]
+  p <- ggplot(df, aes_string(x = var)) +
+    geom_bar(fill = "steelblue", color = "black", alpha = 0.7) +
+    theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+  
+  # Store the plot in the list
+  plot_list[[i]] <- p
+}
+
+# Arrange the plots in a 2x3 grid using ggarrange
+distrib <- ggarrange(plotlist = plot_list, ncol = 3, nrow = 5)
+distrib
+```
+
+
+```{r}
+library(GGally)
+
+# ggpairs with smaller points and text size
+
+ggpairs(df, #columns = 1:5, 
+        aes(alpha = 0.2),
+        lower = list(continuous = wrap("points", size = 0.5)),
+        upper = list(continuous = wrap("cor", size = 2)),
+        diag = list(continuous = wrap("barDiag", bins = 20)),
+        axisLabels = "none")
+```
+
+
+```{r}
+df_scaled <- scale(df)
+```
+
+
+```{r}
+dist_matrix <- dist(df_scaled, method = "euclidean")
+
+hc <- hclust(dist_matrix, method = "ward.D2")
+
+factoextra::fviz_dend(hc, #k = 4, 
+                      cex = 0.6) + #k_colors = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07")) +
+  coord_flip()
+
+```
+
+
+
+
+
+```{r}
+pca <- prcomp(df_scaled, center = TRUE, scale. = TRUE)
+summary(pca)
+```
+```{r}
+factoextra::fviz_pca_var(pca, col.var = "contrib", 
+                     gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+                     repel = TRUE)
+```
+
+
+```{r}
+
+# create BMI variable as weight in kg / height in m^2
+
+df <- df %>%
+  mutate(BMI = Weight / (Height * 0.0254)^2,
+  BMI_group = case_when(
+    BMI < 25 ~ "Normal",
+    BMI >= 25 ~ "Overweight"
+  )) 
+
+table(df$BMI_group) # they all > 25, split into small groups
+
+
+library(ggbiplot)
+ggbiplot(pca, 
+         scale=0, 
+         groups = as.factor(df$BMI_group), 
+         ellipse = T,
+         alpha = 0.2) +
+  theme_minimal()
+
+
+```
+
+
+
+```{r}
+db <- fpc::dbscan(df_scaled, eps = 1.8, MinPts = 5)
+db
+```
+
+```{r}
+#install.packages("factoextra")
+factoextra::fviz_cluster(db, data = df_scaled, stand = FALSE,
+             ellipse = FALSE, show.clust.cent = FALSE,
+             geom = "text", palette = "jco", ggtheme = theme_classic())
+```
+
+
+

@@ -1,0 +1,983 @@
+---
+title: "Регрессионный анализ"
+subtitle: "Линейная регрессия"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float: true
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+library(tidyverse)
+# regression analysis as table output
+library(gtsummary) 
+library(modelsummary)
+library(GGally)
+# tibble or dataframe output for regression analysis
+library(broom) 
+# visual diagnostics of residuals
+library(ggfortify)
+library(ggResidpanel)
+library(performance)
+# coefficients tests
+library(lmtest)
+library(sandwich)
+library(emmeans)
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, error = FALSE)
+```
+
+## **Данные**
+
+#### **Данные Гальтона**
+
+```{r}
+# Galton, F. (1886). Regression Towards Mediocrity in Hereditary Stature Journal of the Anthropological Institute, 15, 246-263
+# Relation between heights of parents and their offspring
+# 934 children in 205 families
+galton <- read.csv("Galton.csv")
+
+# В этом примере, в отличие от лекции, будем использовать рост детей без коэффициента 1,08 
+# для роста "девочек" (в кавычках - потому, что дети уже взрослые) и не будем округлять 
+# ни рост родителей, ни рост детей до цлого числа дюймов
+
+galton <- galton %>% 
+  mutate(childHeight_init = ifelse(gender == "female", 
+                                   1.08*childHeight, 
+                                   childHeight),
+         gender = factor(gender)) %>% 
+  arrange(midparentHeight)
+
+galton %>% head()
+```
+
+**Описательная статистика**
+
+```{r}
+tbl_summary(
+  galton, include = -c(family), 
+  type = list(all_continuous() ~ "continuous2"),
+  statistic = list(
+    all_continuous() ~ c("{mean} ({sd})", "{median} ({p25}-{p75})", "{min}-{max}")
+  )) %>%
+  modify_footnote(everything() ~ NA) %>%
+  bold_labels()
+```
+
+<br>
+
+#### **Pima Indians Diabetes**
+
+```{r}
+# Corrected version of Pima Indians women dataset
+# https://search.r-project.org/CRAN/refmans/mlbench/html/PimaIndiansDiabetes.html
+pima <- read.csv("pima.csv") %>% 
+  mutate(mass_group = cut(mass, 
+                          c(floor(min(.data$mass, na.rm = TRUE)),25,30,
+                            ceiling(max(.data$mass, na.rm = TRUE))), 
+                          right = FALSE, 
+                          include_lowest = TRUE))
+
+pima %>% head()
+```
+
+**Описательная статистика**
+
+```{r}
+tbl_summary(
+  pima, 
+  type = list(all_continuous() ~ "continuous2"),
+  statistic = list(
+    all_continuous() ~ c("{N_nonmiss}", "{mean} ({sd})", "{median} ({p25}-{p75})", "{min}-{max}")
+  )) %>%
+  modify_footnote(everything() ~ NA) %>%
+  bold_labels()
+```
+
+<br>
+
+## **Эксплораторный анализ (графики)**
+
+#### **Данные Гальтона**
+
+```{r, fig.width=9, fig.height=8}
+ggpairs(
+  galton %>% dplyr::select(childHeight, midparentHeight, father, mother, gender), 
+  upper = list(continuous = wrap("points", alpha = 0.5, size = 1),
+               combo = wrap("points", alpha = 0.5, size = 1),
+               disrete = "blank"),
+  lower = list(continuous = "cor",
+               discrete = "count",
+               combo = wrap("box_no_facet", outlier.size = 0.5)),
+  diag = list(continuous = "barDiag",
+              discrete = "barDiag"),
+  showStrips = TRUE, progress = FALSE) +
+  theme_bw(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        panel.grid.minor = element_blank(),
+        strip.placement = "outside",
+        strip.background = element_rect(color = "white", fill = "#EFEBE9"),
+        strip.text = element_text(size = 10, face = "bold"))
+```
+
+<br>
+
+#### **Pima Indians**
+
+```{r, fig.width=9, fig.height=8}
+ggpairs(
+  pima %>% dplyr::select(glucose, everything()), 
+  upper = list(continuous = wrap("points", alpha = 0.5, size = 1),
+               combo = wrap("points", alpha = 0.5, size = 1),
+               disrete = "blank"),
+  lower = list(continuous = "cor",
+               discrete = "count",
+               combo = wrap("box_no_facet", outlier.size = 0.5)),
+  diag = list(continuous = "barDiag",
+              discrete = "barDiag"),
+  showStrips = TRUE, progress = FALSE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        panel.grid.minor = element_blank(),
+        strip.placement = "outside",
+        strip.background = element_rect(color = "white", fill = "#EFEBE9"),
+        strip.text = element_text(size = 8, face = "bold"))
+```
+
+<br>
+
+## **Оценка линейной модели с помощью МНК**
+
+<br>
+
+### **Формула**
+
+$childHeight \sim midparentHeight + gender$, где слева – название зависимой переменной, справа – "сумма" всех предикторов
+
+```{r}
+formula(childHeight ~ midparentHeight + gender)
+```
+
+<br>
+
+### **Модельная матрица**
+
+Для понимания того, как модель "видит" ваши переменные и сколько параметров вам потребуется оценить
+
+`model.matrix(formula, data)`:
+
+-   Создает колонку для константы регрессионного уравнения с названием `(Intercept)`
+
+-   Для каждой numeric переменной создает свою колонку с названием, аналогичным названию переменной в вашем датасете
+
+-   Для каждой категориальной (факторной/ character) переменной с $k$ категориями создает $k-1$ колонок для дамми переменных (для факторных переменных за базовую категорию будет принят первый уровень фактора, для character – первое по алфавиту уникальное значение)
+
+```{r}
+model.matrix(childHeight ~ midparentHeight + gender, galton) %>% 
+  head()
+```
+-   Для mass_group с 3 категориями автоматически созданы 2 дамми-переменные
+
+```{r}
+model.matrix(glucose ~ mass_group, pima) %>% 
+  head()
+```
+
+-   Автоматически исключает строки для тех наблюдений, которые содержат пропуски хотя бы по одной переменной
+
+```{r}
+nrow(pima)
+
+pima_mm <- model.matrix(glucose ~ insulin, pima)
+nrow(pima_mm)
+```
+
+-   При использовании преобразований независимых переменных с помощью встроенных в R математических функций автоматически их применяет, согласно формуле
+
+```{r}
+model.matrix(glucose ~ insulin, pima) %>% head()
+model.matrix(glucose ~ log(insulin), pima) %>% head()
+model.matrix(glucose ~ splines::ns(insulin, df = 4), pima) %>% head()
+```
+
+❗ Преобразования без использования встроенных функций, с помощью знаков "+", "-", "*" и "^" необходимо прописывать в формуле внутри функции `I()`, чтобы эти действия воспринимались как арифметические операции с переменными, а не знаки в формуле модели
+
+Например, мы предполагаем квадратическую зависимость массы тела от возраста, тогда:
+(не забываем, что в таком случае будет сама переменная age и квадрат ее значения)
+
+❌ неправильно:
+
+```{r, error=TRUE}
+#model.matrix(mass ~ age^2, pima) %>% head()
+#model.matrix(mass ~ age + age^2, pima) %>% head()
+```
+
+✔️ правильно:
+
+```{r}
+model.matrix(mass ~ age + I(age^2), pima) %>% head()
+```
+Потом при оценке коэффициентов можно сделать вывод о правильности трансформации переменной по значимости коэффициента. Если age^2 оказался незначимым, то можно сделать вывод, что квадратичная зависимость отсутствует и нужно либо вернуться к линейной, либо найти другую функцию для трансформации переменной.
+
+
+*Центрирование количественной переменной для интерпретации коэффициентов:*
+
+```{r}
+model.matrix(mass ~ I(age - mean(age, na.rm = TRUE)) + I((age - mean(age, na.rm = TRUE))^2), pima) %>% head()
+```
+
+-   Можно использовать в правой части все столбцы датафрейма, кроме столбца для зависимой переменной, не перечисляя их:
+
+```{r}
+model.matrix(glucose ~ ., pima %>% select(-mass_group)) %>% head()
+```
+
+<br>
+
+### **Оценка МНК**
+
+-   `lm(formula, data)`, где `formula` пишется по принципам, описанным выше, `data` - датафрейм с данными (названия переменных, указанных в формуле, должны быть в датафрейме) -- вызов этой функции автоматически применяет `model.matrix` по вашей формуле к данным, в том числе автоматически удаляет строки, в которых будет хотя бы один пропуск по переменным, которые вы включили в формулу, и оценивает параметры для каждой переменной модели с помощью МНК
+
+-   `print` результатов `lm` покажет оценки коэффициентов регрессии и константы
+
+-   `coef`, примененная к результатам `lm`, выгрузит оценку константы и коэффициентов в вектор (начиная с константы)
+
+-   `summary`, примененная к результатам `lm`, покажет оценки всех коэффициентов и константы со стандартными ошибками, значениями t-критерия и p-value для проверки нулевой гипотезы о равенстве 0 коэффициента 
+
+-   `confint`, примененная к результатам `lm`, покажет доверительные интервалы для оценок константы и коэффициентов регрессии
+
+-   `broom::tidy(conf.int = TRUE)` выведет все это в удобный датафрейм
+
+<br>
+
+#### **Данные Гальтона**
+
+```{r}
+galton_fit <- lm(childHeight ~ midparentHeight + gender, galton)
+print(galton_fit)
+```
+
+``` {r}
+coef(galton_fit)
+```
+
+``` {r}
+summary(galton_fit)
+```
+
+```{r}
+confint(galton_fit)
+```
+For forest plots etc use broom tidy function:
+
+```{r}
+broom::tidy(galton_fit, conf.int = TRUE) # conf.int = TRUE for confidence intervals
+```
+
+```{r}
+# Пригодится дальше
+
+galton_beta0 <- coef(galton_fit)[1]
+galton_midp <- coef(galton_fit)[2]
+galton_gend <- coef(galton_fit)[3]
+```
+
+<br>
+
+#### **Pima Indians**
+
+:exclamation: Спецификация модели такая исключительно в учебных целях:
+
+```{r}
+pima_fit0 <- lm(glucose ~ diabetes + pressure + insulin + age + mass_group, pima)
+summary(pima_fit0)
+```
+
+Посмотрим, что еще есть полезного в объекте `lm` и какие полезные функции к нему можно применить на примере этой модели:
+
+-   `formula(fit)` -- вспомнить формулу, заложенную для оценки модели
+
+```{r}
+formula(pima_fit0)
+```
+
+-   `$model` -- датасет, по которому оценена модель (после исключения наблюдений с пропусками, только колонки, задействованные в формуле)
+
+```{r}
+pima_fit0$model %>% head()
+```
+
+-   `nobs(fit)` -- кол-во наблюдений, по которым была оценена регрессия (после исключения наблюдений с пропусками):
+
+```{r}
+pima_fit <- lm(glucose ~ ., pima %>% select(-mass_group))
+nrow(pima_fit$model)
+nobs(pima_fit)
+```
+
+-   `$na.action` -- номера строк, которые были исключены из исходного датасета по причине пропусков по хотя бы одной переменной
+
+```{r}
+pima_fit$na.action %>% head()
+
+pima[pima_fit$na.action, ] %>% head()
+```
+
+-   `model.matrix(fit)` -- модельная матрица (с колонкой из единичек для оценки константы, с дамми для категориальных признаков, после исключения наблюдений с пропусками)
+
+```{r}
+model.matrix(pima_fit) %>% head()
+```
+
+-   `$rank` -- количество оцениваемых параметров (коэффициенты + константа) -- сравните с количеством _показателей_ (колонок) для независимых переменных
+
+```{r}
+pima_fit$rank
+ncol(pima_fit$model) - 1 # минус колонка для зависимой переменной
+```
+
+-   `$fitted.values` или `fitted(fit)` -- условное математическое ожидание зависимой переменной при наборе значений независимых переменных для каждого наблюдения
+
+```{r}
+pima_fit$fitted.values %>% head()
+fitted(pima_fit) %>% head()
+```
+
+-   `$residuals` или `resid(fit)`` -- регрессионные остатки для каждого наблюдения
+
+```{r}
+pima_fit$residuals %>% head()
+resid(pima_fit) %>% head()
+```
+
+Просто покажем, что среднее значение остатков равно 0, как и корреляция с любым предиктором:
+
+```{r}
+mean(resid(pima_fit))
+# упс - здесь это не 0, а практически 0 - специфика хранения данных в компьютере
+```
+Корреляция между остатками и предиктором age
+
+```{r}
+cor(pima_fit$residuals, pima_fit$model$age)
+
+# 7.084196e-17 - практически 0, корреляция отсутствует
+```
+
+
+-   `$df.residual` -- количество степеней свободы для оценки ошибок
+
+```{r}
+pima_fit$df.residual
+```
+
+<br>
+
+Для расчета условных матожиданий (fitted values) и остатков (и много чего еще) для каждого наблюдения есть удобная функция `broom::augment` (если в аргумент `newdata` поставить исходный датасет, то присоединит к нему новые колонки, что может быть удобно, если были пропуски в данных)
+
+```{r}
+broom::augment(pima_fit) %>% head()
+
+# теперь есть колонки с остатками и условными матожиданиями
+```
+Если хотим колонки с остатками и условными матожиданиями присоединить к исходному датасету, только к наблюдениям без пропусков:
+
+```{r}
+broom::augment(pima_fit, newdata = pima) %>% head()
+```
+
+<br>
+
+### **Коэффициент множественной корреляции**
+
+-   `summary` от объекта `lm`, помимо прочего, покажет описательную статистику по остаткам (Residuals), стандартной ошибке регрессии (Residual standard error, RSE), количеству степеней свободы, $R^2$
+
+-   `broom::glance` выдаст все эти (и некоторые другие) показатели в виде датафрейма
+
+```{r}
+pima_fit_sum <- summary(pima_fit)
+pima_fit_sum
+```
+
+```{r}
+pima_fit_gof <- broom::glance(pima_fit)
+pima_fit_gof %>% head()
+```
+
+-   Коэффициент детерминации ($R^2$):
+
+```{r}
+pima_fit_sum$r.squared
+```
+
+-   Коэффициент множественной корреляции:
+
+```{r}
+sqrt(pima_fit_sum$r.squared)
+```
+
+Оцените однофакторную регрессию для роста взрослых детей по росту среднего родителя по данным `galton` и сравните $R^2$ с квадратом линейной корреляции Пирсона между этими показателями.
+
+Для однофакторной модели корень из $R^2$ равен квадрату корреляции Пирсона между зависимой и независимой переменной.
+
+```{r}
+galton_fit1 <- lm(childHeight ~ midparentHeight, galton)
+summary(galton_fit1)$r.squared
+cor(galton$childHeight, galton$midparentHeight)^2
+
+```
+
+
+<br>
+
+### **Когда модель "ломается"**
+
+-   Когда количество предикторов равно количеству наблюдений:
+
+```{r}
+summary(lm(glucose ~ diabetes + pressure + insulin + age, pima_fit$model[1:4, ]))
+```
+
+-   Когда количество предикторов равно количеству наблюдений (без пропусков) минус 1 -- "perfect fit" (аналог -- прямая через 2 точки):
+
+```{r}
+summary(lm(glucose ~ diabetes + pressure + insulin + age, pima_fit$model[1:5, ]))
+```
+
+-   Когда зависимость $Y$ от $X$ детерминированная:
+
+```{r}
+lm(midparentHeight ~ father + mother, galton) %>% summary()
+```
+
+-   Когда вариация предиктора нулевая (одинаковое значение для всех):
+
+```{r}
+summary(lm(glucose ~ female, pima %>% mutate(female = 1)))
+```
+
+-   Когда в модели есть предиктор, полученный как линейная комбинация других предикторов (Гальтон считал рост среднего родителя как (1,08 * рост матери + рост отца)/2:
+
+```{r}
+summary(lm(childHeight ~ midparentHeight + father + mother, galton))
+```
+
+<br>
+
+### **Диагностика**
+
+[Тут](http://www.sthda.com/english/articles/39-regression-model-diagnostics/161-linear-regression-assumptions-and-diagnostics-in-r-essentials/) можно почитать краткую информацию о сути каждого графика диагностики в привязке к предпосылкам линейной модели
+
+**Основные графики для диагностики**
+
+-   Пакет `ggfortify`:
+
+```{r}
+autoplot(pima_fit)
+```
+
+-   Пакет `ggresidPanel`  (подробнее с примерами и другими функциями для графического анализа остатков, в том числе для сравнения нескольких моделей - см. [тут](https://goodekat.github.io/ggResidpanel/)):
+
+```{r}
+resid_panel(pima_fit, plots = "R")
+```
+
+-   Пакет `performance` (подробнее -- [тут](https://github.com/easystats/performance)):
+
+```{r, fig.width=8, fig.height=10}
+check_model(pima_fit)
+```
+
+-   Базовая функция `plot`:
+
+```{r}
+plot(pima_fit)
+```
+
+<br>
+
+#### **Fitted versus residuals**
+
+-   Разброс остатков вокруг оценки условного мат.ожидания зависимой переменной
+
+-   Для оценки *предпосылки о линейности по $X$* и корректной спецификации формы зависимости от $X$, признаки гетероскедастичности также могут быть на нем заметны
+
+-   :exclamation: Если у вас только категориальные предикторы, будет не очень информативным
+
+Примерно такой ожидаем получить при отсутствии проблем:
+
+```{r, fig.height=4, fig.width=6}
+plot(fitted(galton_fit), resid(galton_fit))
+```
+
+А вот здесь могут возникнуть сомнения:
+
+```{r, fig.height=4, fig.width=6}
+autoplot(pima_fit, 1, ncol = 1)
+```
+
+В этом случае нужно понять источник нелинейности: включенные в модель количественные предикторы / "фон ненаблюдаемого конфаундера" / выбросы?
+
+Для включенных в модель количественных предикторов можно посмотреть на графики **residuals versus predictor** -- тут можно воспользоваться функцией из пакета `ggresidPanel`:
+
+```{r, fig.width=8, fig.height=6}
+resid_xpanel(pima_fit, smoother = TRUE)
+```
+
+Добавим нелинейности:
+
+квадратичная зависимость от insulin
+
+это "распрямило" график Fitted vs Residuals
+
+```{r, fig.width=8, fig.height=6}
+pima_fit2 <- lm(glucose ~ diabetes + pressure + insulin + I(insulin^2) + age + mass_group, pima)
+
+autoplot(pima_fit2)
+```
+
+<br>
+
+#### **Scale-location**
+
+-   Для проверки гомогенности дисперсии остатков (гомоскедастичности)
+
+-   Стандартизованные остатки = остатки / стандартное отклонение остатков
+
+Примерно такой ожидаем получить при отсутствии проблем:
+
+Линия примерно горизонтальная, без явных закономерностей
+
+```{r, fig.height=4, fig.width=6}
+autoplot(galton_fit, 3, ncol = 1)
+```
+
+А вот тут можно заподозрить проблемы (модель исключительно для примера):
+
+```{r, fig.height=4, fig.width=8}
+pima_ins <- lm(insulin ~ glucose, pima)
+
+autoplot(pima_ins, c(1,3))
+```
+
+Что с этим делать -- см. дальше в робастных стандартных ошибках.
+
+<br>
+
+#### **QQ-plot и гистограмма**
+
+-   Для проверки "нормальности" распределения остатков
+
+Примерно такой ожидаем получить при отсутствии проблем:
+
+```{r, fig.height=4, fig.width=8}
+resid_panel(galton_fit, plots = c("qq", "hist"))
+```
+
+А вот тут можно заподозрить отклонения -- не очень большие и побольше:
+
+```{r, fig.height=4, fig.width=8}
+resid_panel(pima_fit2, plots = c("qq", "hist"))
+```
+
+Вот тут уже критично
+
+```{r, fig.height=4, fig.width=8}
+resid_panel(pima_ins, plots = c("qq", "hist"))
+```
+
+<br>
+
+#### **Residuals vs Leverage**
+
+-   Выбросы по $Y$ -- их наличие может приводить к увеличению RSE (стандартной ошибки регрессии)
+-   Большой "рычаг" (по отклонению значения $X$ от "центра масс")
+-   Влиятельные значения -- их исключение может сильно изменить коэффициенты регрессии -- имеют большой рычаг и большой остаток (если рассчитать остаток по регрессии без этого наблюдения)
+-   Расстояние Кука учитывает и рычаг, и остатки (обратить внимание на случаи, когда расстояние Кука $\geq 0.5-1$ или $>\frac{4}{n}$ или $>\frac{4}{n-p-1}$)    
+-   Всё это необязательно влечет за собой его исключение -- решение должно быть обоснованным (ошибка ли это в данных или это допустимые значения), плюс есть решение в виде замены эстиматора (если это допустимо)
+
+```{r, fig.height=4, fig.width=8}
+resid_panel(pima_fit, plots = c("lev", "cookd"))
+```
+
+Наблюдения, которые выходят за линию, - выбросы
+
+
+<br>
+
+#### **Мультиколлинеарность**
+
+Подробнее про возомжные признаки мультиколлинеарности можно почитать [здесь](https://www.theanalysisfactor.com/eight-ways-to-detect-multicollinearity/).
+
+Мультиколлинеарность - когда предикторы в моделе сильно коррелируют между собой
+
+Сравним результаты оценки регрессий для роста детей в зависимости от разных комбинаций объясняющих переменных:
+
+Если включение одного из предикторов делает другой незначимым, или меняет коэффициенты каким-то странным образом, это может быть признаком мультиколлинеарности.
+
+```{r}
+modelsummary(list("(1)" = lm(childHeight ~ father, galton),
+                  "(2)" = lm(childHeight ~ mother, galton),
+                  "(3)" = lm(childHeight ~ midparentHeight, galton),
+                  "(4)" = lm(childHeight ~ father + mother, galton),
+                  "(5)" = lm(childHeight ~ father + midparentHeight, galton),
+                  "(6)" = lm(childHeight ~ mother + midparentHeight, galton)))
+```
+
+Коэффициенты корреляции Пирсона:
+
+```{r}
+cor(galton %>% dplyr::select(father, mother, midparentHeight))
+```
+
+VIF (обратите внимание на то, что он может быть низким даже при высокой корреляции переменных, поэтому оценка коэффициентов корреляции первична):
+
+```{r}
+car::vif(lm(childHeight ~ father + mother, galton))
+car::vif(lm(childHeight ~ father + midparentHeight, galton))
+car::vif(lm(childHeight ~ mother + midparentHeight, galton))
+```
+
+<br>
+
+### **Робастные стандартные ошибки**
+
+-   Пакет `sandwich` для различных sandiwch эстиматоров ошибок (в зависимости от причины непостоянства их дисперсии/ зависимости ошибок (наблюдений))
+
+Подробнее про разные sanwich эстиматоры см. в [vignette для пакета `sandwich`](https://cran.r-project.org/web/packages/sandwich/vignettes/sandwich.pdf)
+
+-   Функция `coeftest` из пакета `lmtest` (вместо `summary`) и `coefci` из того же пакета (вместо `confint`), после первой также можно применять `broom::tidy` и `broom::glance`, чтобы получить оценки в виде датафрейма
+
+<br>
+
+#### **Кластеризованные стандратные ошибки**
+
+В данных Гальтона были дети из одной семьи (`r length(unique(galton$family))` семей при `r nrow(galton)` наблюдениях) -- предположим, что внутри одной семьи вариация роста детей меньше, чем между семьями. По диагностическим графикам мы можем не увидеть каких-либо отклонений -- это зависит исключительно от дизайна.
+
+Стандартные ошибки и ДИ без коррекции:
+
+```{r}
+summary(galton_fit)
+confint(galton_fit)
+
+coeftest(galton_fit) %>% head()
+coefci(galton_fit)
+```
+
+Кластеризованные (cluster-robust) стандартные ошибки и ДИ:
+
+```{r}
+coeftest(galton_fit, vcov. = vcovCL, cluster = ~ family)
+coefci(galton_fit, vcov. = vcovCL, cluster = ~ family)
+```
+
+-   `broom`:
+
+```{r}
+coeftest(galton_fit, vcov. = vcovCL, cluster = ~ family) %>% broom::tidy(conf.int = TRUE)
+```
+
+<br>
+
+#### **Cтандартные ошибки, скорректированные на гетероскедастичность**
+
+Помним, что гетероскедастичность остатков на диагностических графиках может быть результатом как некорректной спецификации формы зависимости E(Y|X) от X, так и гетероскедастичности ошибок.
+
+Вернемся к примеру с зависимостью инсулина от глюкозы:
+
+```{r, fig.width=8, fig.height=4}
+autoplot(pima_ins, c(1,3), ncol = 2)
+```
+
+Sandwich эстиматоры не влияют на коэффициенты! Коэффициенты будут ровно такие же, как и без коррекции. Коррекция изменяет стандартные ошибки и соответственно ДИ и тесты и р-значение. 
+
+Но такая коррекция снижает мощность (увеличивает вероятность ошибки 2 рода), поэтому не нужно делать коррекцию без надобности.
+
+
+Эстиматоры:
+vcovHC - коррекция на гетероскедастичность
+ - на кластеризацию
+ - на автокорреляцию
+ 
+
+Типы: HC1, HC3, НС4..
+
+Разные Sandwich эстиматоры с коррекцией на гетероскедастичность:
+
+-   HC0 -- классическая коррекция, White standard errors:
+
+```{r}
+coeftest(pima_ins, vcov. = vcovHC, type = "HC1")
+```
+
+
+
+
+
+-   HC3 -- используется по умолчанию (best performance in *small samples* as it gives less weight to influential observations):
+
+```{r}
+coeftest(pima_ins, vcov. = vcovHC, type = "HC3")
+coeftest(pima_ins, vcov. = vcovHC)
+```
+
+-   HC4 тоже можно использовать (improve small sample performance, especially in the *presence of influential observations*):
+
+```{r}
+coeftest(pima_ins, vcov. = vcovHC, type = "HC4")
+```
+
+<br>
+
+### **Доверительные интервалы и гипотезы**
+
+#### **ДИ для коэффициентов регрессии**
+
+-   `summary` от объекта `lm` (по умолчанию без ДИ)
+
+-   `broom::tidy` от объекта `lm` (по умолчанию без ДИ)
+
+```{r}
+summary(galton_fit)
+broom::tidy(galton_fit)
+```
+
+-   `summary` от объекта `lm` с аргументом `conf.int = TRUE`
+
+-   `confint` от объекта `lm`
+
+-   `broom::tidy` от объекта `lm` с аргументом `conf.int = TRUE`
+
+```{r}
+summary(galton_fit, conf.int = TRUE)
+broom::tidy(galton_fit, conf.int = TRUE)
+```
+
+<br>
+
+#### **ДИ для условного мат.ожидания и предсказательный интервал для значения Y для нового наблюдения**
+
+-   Для условного мат.ожидания: `predict` с аргументом `interval = "confidence"` (с исключением наблюдений с пропусками по $X$, $Y$)
+
+```{r}
+predict(galton_fit, interval = "confidence") %>% head()
+```
+
+-   Для значения Y у нового наблюдения с таким же значением X: `predict` с аргументом `interval = "prediction"` (с исключением наблюдений с пропусками по $X$, $Y$)
+
+```{r}
+predict(galton_fit, interval = "prediction") %>% head()
+```
+
+-   `broom::augment` с аналогичными аргументами (можно "приклеить" к начальному датасету):
+
+```{r}
+broom::augment(pima_fit, newdata = pima, interval = "confidence") %>% head()
+broom::augment(pima_fit, newdata = pima, interval = "prediction") %>% head()
+```
+
+Для конкретных значений X:
+
+```{r}
+ci <- augment(galton_fit, newdata = crossing(midparentHeight = c(64,69,74),
+                                             gender = levels(galton$gender)),
+              interval = "confidence")
+
+pri <- augment(galton_fit, newdata = crossing(midparentHeight = c(64,69,74),
+                                             gender = levels(galton$gender)),
+               interval = "prediction")
+
+ci %>% left_join(pri, by = c("midparentHeight", ".fitted"), suffix = c("_ci", "_pi"))
+```
+
+Если вам нужен не интервал, а стандартная ошибка для условного мат.ожидания, то вместо `interval = ...` в функцию `augment` можно подать аргумент `se_fit = TRUE`:
+
+```{r}
+augment(galton_fit, newdata = crossing(midparentHeight = c(64,69,74),
+                                       gender = levels(galton$gender)),
+        se_fit = TRUE)
+```
+
+<br>
+
+#### **Тесты для коэффициентов регрессии**
+
+-   По умолчанию для всех коэффициентов проверяется нулевая гипотеза о равенстве нулю
+
+Сравните результаты для парной регрессии роста от пола по данным `galton` с результатами t-теста
+
+```{r}
+
+```
+
+<br>
+
+-   Для тестирования нулевой гипотезы о равенстве коэффициента определенному значению, помимо 0, необходимо использовать аргумент `offset` в функции `lm`, указав в нем произведение нужного значения (*b*) и переменной, для которой будет оцениваться данная гипотеза -- тогда в `summary` мы для этой переменной в колонке Estimate увидим значение разницы между *b* и значением коэффициента, а в колонке с p-value -- p-значение для статистики критерия при $H0: \beta = b$ (если вы оцениваете при этом многофакторную модель, то на оценки коэффициентов при остальных переменных это не повлияет):
+
+```{r}
+summary(lm(childHeight ~ midparentHeight + gender, galton, offset = 1*midparentHeight))
+```
+
+offset - аргумент
+Гипотеза о равенстве коэффициента регрессии для midparentHeight единице
+
+<br>
+
+-   Нулевая гипотеза об одновременном равенстве нулю всех коэффициентов регрессии: см. результаты для F-теста в `summary` к `lm` или `anova` от модели среднего и `lm` (тест субмодель - модель, или нулевая модель - полная модель, или nested модели):
+
+```{r}
+summary(galton_fit)
+
+galton_mean <- lm(childHeight ~ 1, galton)
+anova(galton_mean, galton_fit)
+```
+
+Попробуйте сделать ANOVA для зависимости глюкозы от ИМТ в данных `pima` и сравнить с результатами F-теста.
+
+```{r}
+
+```
+
+<br>
+
+-   Нулевая гипотеза о равенсте коэффициентов при нескольких переменных (или для иной линейной комбинации коэффициентов): `car::linearHypothesis` с аргументом `hypothesis.matrix` (второй по порядку), в котором прописывается нужное ограничение на пару коэффициентов:
+
+```{r}
+galton_fit2 <- lm(childHeight ~ father + mother, galton)
+
+car::linearHypothesis(galton_fit2, "father=mother") 
+```
+
+Коээфициенты при father и mother равны, их разница равна 0.
+
+
+-   Эта же функция может использоваться для теста на одновременное равенство нулю всех (или нескольких) коэффициентов регрессии (в том числе вместо `anova` в примере выше) -- в этом случае в аргумент `hypothesis.matrix` (второй по порядку) подается вектор с названиями переменных модели, для которых нужен тест:
+
+```{r}
+car::linearHypothesis(galton_fit2, names(coef(galton_fit2)[-1]))
+```
+
+Таким же способом можно, например, проверить гипотезу об отсутствии ассоциации между Y и категориальным показателем с более чем двумя категориями (это эквивалентно гипотезе о том, что коэффициенты при всех дамми переменных для этого показателя равны 0) или между Y и количественным показателем, зависимость от которого была смоделирована как нелинейная с помощью полиномов или сплайнов (это эквивалентно гипотеще о том, что коэффициенты при всех переменных, в которых участвует этот показатель, равны 0):
+
+```{r}
+# Ассоциация глюкозы с ИМТ (при разбивке на категории)
+
+car::linearHypothesis(pima_fit0, names(coef(pima_fit0))[grepl("mass", names(coef(pima_fit0)))])
+```
+
+```{r}
+# Ассоциация глюкозы с инсулином, если зависимость от последнего задана как квадратическая
+
+car::linearHypothesis(pima_fit2, names(coef(pima_fit2))[grepl("insulin", names(coef(pima_fit2)))])
+```
+
+<br>
+
+Обратите внимание на то, что `anova` не умеет работать с робастными стандартными ошибками в отличие от `linearHypothesis`:
+
+```{r}
+car::linearHypothesis(galton_fit2, names(coef(galton_fit2)[-1]),
+                      vcov = vcovCL(galton_fit2, cluster = ~ family))
+car::linearHypothesis(galton_fit2, names(coef(galton_fit2)[-1]),
+                      vcov = vcovHC(galton_fit2, "HC4"))
+```
+
+<br>
+
+-   `linearHypothesis` также позволяет проверять гипотезы об одновременном равенстве нескольких коэффициентов не только нулю, но и конкретным значениям (аргумент `rhs` -- значения указываются в том же порядке, что и коэффициенты):
+
+```{r}
+car::linearHypothesis(galton_fit2, names(coef(galton_fit2)[-1]), rhs = c(1,1))
+```
+
+<br>
+
+### **Модификаторы эффекта**
+
+Подробнее про оценку моделей с эффектами пересечения между различными типами переменных, интерпретацию и визуализацию см. [здесь](https://stats.oarc.ucla.edu/r/seminars/interactions-r/).
+
+<br>
+
+#### **Категориальная `*` количественная переменные**
+
+Дайте интерпретацию константе и коэффициентам:
+
+```{r}
+pima_fit4 <- lm(glucose ~ diabetes*log(insulin), pima)
+summary(pima_fit4)
+```
+
+-   Иллюстрация для оценки условного мат.ожидания в модели с эффектом пересечения:
+
+```{r}
+ggplot() + 
+  geom_point(aes(x = insulin, y = glucose), pima) + 
+  geom_smooth(aes(x = insulin, y = glucose, color = diabetes), pima, 
+              method = lm, formula = y ~ log(x), se = FALSE) +
+  labs(color = element_blank()) +
+  theme_bw()
+```
+
+:exclamation: Обратите внимание на то, что `geom_smooth` с `color` в ``aesthetics отрисует вам оценку условного мат.ожидания из модели с эффектом пересечения, поэтому если вы оцениваете модель без него и хотите сделать иллюстрацию, вам нужно будет отрисовать прямые/ кривые для условного мат.ожидания вручную (они будут "параллельными").
+
+<br>
+
+-   Получить оценку эффектов по категориям переменной из пересечения и сравнить их:
+
+```{r}
+emtrends(pima_fit4, ~ diabetes, var = "log(insulin)")
+```
+
+```{r}
+emtrends(pima_fit4, revpairwise ~ diabetes, var = "log(insulin)")
+```
+
+<br>
+
+-   Оценка условного мат.ожидания для отдельных сочетаний переменных в пересечении и их сравнение для значений категориальной переменной:
+
+```{r}
+emmeans(pima_fit4, 
+        ~ diabetes*insulin, 
+        at = list(diabetes = c("neg", "pos"),
+                  insulin = c(100,200,400)))
+emmeans(pima_fit4, 
+        ~insulin | diabetes,
+        at = list(insulin = c(100,200,400)))
+
+contrast(emmeans(pima_fit4, 
+                 ~ diabetes*insulin, 
+                 at = list(diabetes = c("neg", "pos"),
+                           insulin = c(100,200,400))), 
+         "revpairwise", by = "insulin")
+```
+
+<br>
+
+#### **Категориальная `*` категориальная переменные**
+
+Дайте интерпретацию константе и коэффициентам:
+
+```{r}
+pima_fit5 <- lm(glucose ~ diabetes*mass_group, pima)
+summary(pima_fit5)
+```
+
+-   Условное мат.ожидание для отдельных сочетаний переменных в пересечении и их сравнение:
+
+```{r}
+emmeans(pima_fit5, ~ diabetes*mass_group)
+contrast(emmeans(pima_fit5, ~ diabetes*mass_group),
+         "revpairwise", by = "mass_group")
+contrast(emmeans(pima_fit5, ~ diabetes*mass_group),
+         "dunnett", by = "diabetes")
+```
+
+-   Иллюстрация для оценки мат.ожидания при разных значениях переменных из эффекта пересечения:
+
+```{r}
+emmip(pima_fit5, mass_group ~ diabetes, CIs = TRUE)
+```

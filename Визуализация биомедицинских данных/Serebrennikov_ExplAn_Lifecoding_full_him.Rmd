@@ -1,0 +1,189 @@
+---
+title: 'Dmitrii's solutions'
+author: "Дмитрий Серебренников"
+output: 
+  html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Загрузим данные и пакеты
+
+```{r}
+library(tidyverse)
+theme_set(theme_minimal())
+```
+
+...
+
+[Body Fat Prediction Dataset](https://www.kaggle.com/datasets/fedesoriano/body-fat-prediction-dataset).
+
+Variables:
+
+1. Density determined from underwater weighing
+2. Percent body fat from Siri's (1956) equation
+3. Age (years)
+4. Weight (lbs)
+5. Height (inches)
+6. Neck circumference (cm)
+7. Chest circumference (cm)
+8. Abdomen 2 circumference (cm)
+9. Hip circumference (cm)
+10. Thigh circumference (cm)
+11. Knee circumference (cm)
+12. Ankle circumference (cm)
+13. Biceps (extended) circumference (cm)
+14. Forearm circumference (cm)
+15. Wrist circumference (cm)
+
+```{r}
+df <- read.csv('data/bodyfat.csv')
+```
+
+
+# Эксплораторный анализ
+
+```{}
+ЗАДАНИЕ: Проведите эксплораторный анализ данных bodyfat за 25 минут. Вы вольны самостоятельно решить какой стратегией пойти, но напомню, что сначала вы должны проанализировать общую структуру данных датасета (как строк, так и колонок), а потом можете сосредоточиться на одном сюжете и детально рассмотреть его.
+
+NB: Поскольку мы учимся *эксплораторному анализу* не предполагается, что вы будете использовать статистические тесты и моделирование.
+```
+
+Решение написать в чанке ниже и прислать в зум-чат по истечению времени:
+
+```{r, warning=FALSE}
+summary(df)
+df %>% 
+  skimr::skim()
+
+# Correltaions
+
+library(corrplot)
+p1 <- df %>% 
+  cor() %>% 
+  corrplot(
+    order = 'hclust'
+  )
+
+library(corrr)
+
+p2 <- df %>% 
+  cor() %>% 
+  network_plot(min_cor = .0)
+
+p3 <- df %>% 
+  select(-Age, -Height) %>% 
+  cor() %>% 
+  network_plot(min_cor = .0)
+
+# Column relations
+
+library(GGally)
+lowerFn <- function(data, mapping, method = "lm", ...) {
+  p <- ggplot(data = data, mapping = mapping) +
+    # geom_point(colour = "blue") +
+    geom_smooth(method = method, color = "red", ...)
+  p
+}
+
+p4 <- ggpairs(
+  df, 
+  progress = F,
+  lower = list(continuous = wrap(lowerFn, method = "lm")),
+  diag = list(continuous = wrap("barDiag", colour = "blue")),
+  upper = list(continuous = wrap("cor", size = 10))
+)
+
+# PCA
+
+library(factoextra)
+library(FactoMineR)
+library(ggbiplot) 
+
+df.pca <- prcomp(df, 
+                scale = T) 
+summary(df.pca)
+
+p6 <- fviz_pca_var(df.pca, col.var = "contrib")
+p7 <- ggbiplot(df.pca, 
+         scale=0, alpha = 0.1)
+p8 <- fviz_contrib(df.pca, choice = "var", axes = 1, top = 24) 
+
+
+# Heatmap + clustering
+
+library(pheatmap)
+df_scaled <- scale(df)
+df_dist <- dist(df_scaled)
+
+p9 <- pheatmap(df_scaled, 
+         show_rownames = FALSE, 
+         clustering_distance_rows = df_dist,
+         clustering_method = "ward.D2", 
+         cutree_rows = 5,
+         cutree_cols = length(colnames(df_scaled)),
+         angle_col = 45, 
+         main = "Dendrograms for clustering rows and columns with heatmap")
+
+
+# Clustering
+library(cluster)
+
+df_kmean <- kmeans(df_dist,
+                          centers = 3, 
+                          iter.max = 10, 
+                          nstart = 35)
+
+p10 <- fviz_cluster(object = df_kmean, 
+             data = df_dist,
+             geom = 'point',
+             show.clust.cent = F) + 
+  theme_minimal()
+
+sil <- silhouette(df_kmean$cluster,
+                  df_dist)
+p11 <- fviz_silhouette(sil, palette = "jco",
+                ggtheme = theme_classic())
+
+# Another projection via UMAP
+
+library(tidymodels)
+library(embed)
+library(viridis)
+
+umap_prep <- recipe(~., data = df_scaled) %>%
+  step_normalize(all_predictors()) %>% 
+  step_umap(all_predictors()) %>%  
+  prep() %>%  
+  juice() 
+
+p13 <- umap_prep %>%
+  ggplot(aes(UMAP1, UMAP2)) + 
+  geom_point(aes(shape = as.character(df_kmean$cluster),
+                 color = -df$Density),
+             alpha = 0.7, size = 2) +
+  scale_colour_viridis() +
+  theme(
+    legend.position = 'bottom'
+  )
+
+p14 <- umap_prep %>%
+  ggplot(aes(UMAP1, UMAP2)) + 
+  geom_point(aes(shape = as.character(df_kmean$cluster),
+                 color = -df$Age),
+             alpha = 0.7, size = 2) +
+  scale_colour_viridis() +
+  theme(
+    legend.position = 'bottom'
+  )
+```
+
+
+
+
+
+
+
+
