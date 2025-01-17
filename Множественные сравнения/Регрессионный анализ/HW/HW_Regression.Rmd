@@ -1,0 +1,577 @@
+---
+title: "Оценка общего эффекта физической активности в отношении гликированного гемоглобина"
+author: "Виктория Зайцева"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: flatly
+    toc: yes
+    toc_float:
+      collapsed: true
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(readxl)
+library(summarytools)
+library(rstatix)
+library(GGally)
+library(factoextra)
+library(ggpubr)
+library(ggbiplot)
+library(tidymodels)
+library(skimr)
+library(corrplot)
+library(gtsummary)
+library(modelsummary)
+library(broom)
+library(ggfortify)
+library(ggResidpanel)
+library(performance)
+library(lmtest)
+library(sandwich)
+library(corrplot)
+
+custom_theme <- theme(
+    strip.background = element_rect(fill = "lightgrey", color = "black"),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
+    #remove grid
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+  )
+
+```
+
+
+
+```{r}
+data <- read_excel("HW_data.xlsx")
+```
+
+
+# Задача
+\
+Оценить общий эффект физической активности на уровень гликолизированного гемоглобина на основе данных NHANES 2013-2014.
+\
+Согласно Википедии, гликированный гемоглобин отражает процент гемоглобина крови, необратимо соединенного с молекулами глюкозы, и является интегральным показателем гликемии за три месяца: чем выше уровень гликированного гемоглобина, тем выше была гликемия
+за последние три месяца и, соответственно, больше риск развития осложнений сахарного диабета.
+\
+\
+На основе литературных данных и предыдущих исследований с использованием данных NHANES, оптимальным методом оценки физической активности является использование шкалы MET (Metabolic Equivalent of Task). 
+
+![](MET.jpeg)
+
+
+После расчета MET для каждой активности, финальной метрикой физической активности будет являться суммарное число  MET-минут за неделю.
+
+
+```{r}
+data_MET = data %>%
+    mutate(
+      MET_vigorous_work = 8 * PAQ605 * PAD615 * PAQ610,
+      MET_moderate_work = 4 * PAQ620 * PAD630 * PAQ625,
+      MET_bike = 4 * PAQ635 * PAD645 * PAQ640,
+      MET_vigorous_recreational = 8 * PAQ650 * PAD660 * PAQ655,
+      MET_moderate_recreational = 4 * PAQ665 * PAD675 * PAQ670,
+      MET_sedentary = 1.5 * PAD680,
+
+      Total_MET = MET_vigorous_work +
+                  MET_moderate_work +
+                  MET_bike +
+                  MET_vigorous_recreational +
+                  MET_moderate_recreational -
+                  MET_sedentary
+    )
+```
+
+```{r}
+
+#SEQN, RIAGENDR, RIDAGEYR, RIDRETH3, DMDEDUC2 [educational], INDFMIN2[income], SMQ040 [smoking], LBXGH - Glycohemoglobin (%) [hemoglobin]
+# Comorbodities - есть/нет по всем колонкам BPQ
+
+
+data_MET_final = data_MET %>% 
+    mutate(Comorbidities = if_else(
+        MCQ010 == 1 | MCQ035 == 1 | MCQ160C == 1 | MCQ160B == 1 |
+        MCQ160E == 1 | MCQ160F == 1 | MCQ160M == 1 | MCQ170M == 1 |
+        MCQ160O == 1 | MCQ220 == 1,
+        1, 0)) %>%
+    select(SEQN, RIAGENDR, RIDAGEYR, RIDRETH3, DMDEDUC2, INDFMIN2, SMQ040, 
+           LBXGH, Comorbidities, Total_MET) %>% 
+    mutate(
+    Gender = factor(RIAGENDR, levels = c(1, 2),
+                    labels = c("Male", "Female")),
+    Race = factor(RIDRETH3,  levels = c(1, 2, 3, 4, 6, 7),
+                       labels = c("Mexican",
+                                  "Hispanic",
+                                  "White",
+                                  "Black",
+                                  "Asian",
+                                  "Other")),
+    Education = factor(DMDEDUC2, levels = c(1, 2, 3, 4, 5),
+                       labels = c("<9th grade",
+                                  "9-11th grade",
+                                  "High School",
+                                  "Student",
+                                  "Graduate")),
+    Income_Level = factor(INDFMIN2,
+                         levels = 1:12,
+                         labels = c(
+                           "<4,999$",
+                           "5k-9,999$",
+                           "10k-14,999$",
+                           "15k-19,999$",
+                           "20k-24,999$",
+                           "25k-34,999$",
+                           "35k-44,999$",
+                           "45k-54,999$",
+                           "55k-64,999$",
+                           "65k-74,999$",
+                           "75k-99,999$",
+                           "100k+"
+                         )),
+    Comorbidities = factor(Comorbidities, levels = c(0, 1),
+                           labels = c("No", "Yes")),
+    Smoking = factor(SMQ040, levels = 1:3,
+                     labels = c("Every Day", "Sometimes", "Never")),
+    GlyHemo = as.numeric(LBXGH)) %>%
+  select(Gender, Race, Education, Income_Level, Comorbidities,
+         Smoking, GlyHemo, Total_MET)
+```
+
+```{r}
+#head(data_MET_final)
+```
+\
+# Эксплораторный анализ
+
+\
+\
+```{r}
+numeric_cols <- select_if(data_MET_final, is.numeric)
+factor_cols <- select_if(data_MET_final, is.factor)
+```
+
+```{r}
+tbl_summary(
+  data_MET_final, 
+  type = list(all_continuous() ~ "continuous2"),
+  statistic = list(
+    all_continuous() ~ c("{mean} ({sd})", "{median} ({p25}-{p75})", "{min}-{max}")
+  )) %>%
+  modify_footnote(everything() ~ NA) %>%
+  bold_labels()
+```
+
+
+## Анализ категориальных переменных
+\
+\
+
+```{r}
+
+factor_cols %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value") %>%
+  ggplot(aes(x = Value)) +
+  geom_bar(fill = "royalblue", color = "black", width = 0.8) +
+  facet_wrap(~ Variable, scales = "free", ncol = 3) +
+  theme_minimal(base_size = 12) +
+  custom_theme +
+  labs(
+    y = "Count"
+  )
+
+```
+
+
+\
+\
+В нашей выборке преобладают белые мужчины с высоким доходом и без заболеваний, что не является репрезентативным для всего населения США и может исказить результаты исследования. Поэтому в дальнейшем мы будем учитывать этот факт при интерпретации результатов.
+\
+\
+
+## Анализ количественных переменных
+
+```{r, fig.height=7, fig.width=8, figure.dpi=200}
+numeric_cols %>%
+  gather(key = "Variable", value = "Value") %>%
+  ggplot(aes(x = Value)) +
+  geom_histogram(bins = 30, fill = "royalblue", color = "black") +
+  facet_wrap(~ Variable, scales = "free") +
+  theme_minimal()
+```
+
+```{r}
+numeric_cols %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value") %>%
+  ggplot(aes(x = Value)) +
+  geom_histogram(
+    bins = 30, 
+    fill = "royalblue", 
+    color = "black", 
+    alpha = 0.8
+  ) +
+  facet_wrap(~ Variable, scales = "free", ncol = 3) +
+  
+  theme_minimal(base_size = 14) +
+  custom_theme +
+  labs(
+    x = "",
+    y = ""
+  )
+
+```
+\
+\
+
+
+Физическая активность имеет ненормальное распределение, поэтому для дальнейшего анализа мы будем использовать логарифмированное значение физической активности.
+\
+\
+```{r}
+
+# есть отрицательные значения, то понадобится log1p + offset шкалирование. И отфильтруем данные от  изначально отрицательных значений
+
+data_MET_final <- data_MET_final %>% 
+  mutate(Total_MET_log = log1p(Total_MET 
+                                                + abs(min(Total_MET)))
+          ) %>%
+  filter(Total_MET_log > 2.5)
+
+numeric_cols <- select_if(data_MET_final, is.numeric)
+
+numeric_cols %>%
+  gather(key = "Variable", value = "Value") %>%
+  ggplot(aes(x = Value)) +
+  geom_histogram(bins = 30, fill = "royalblue", color = "black") +
+  facet_wrap(~ Variable, scales = "free") +
+  custom_theme 
+```
+\
+\
+После логарифмирования распределение физической активности стало улучшилось.
+Логарифмирование также позволило уменьшить количество выбросов, потенциально улучшив качество модели.
+\
+\
+```{r}
+# Boxplot to identify outliers
+numeric_cols %>%
+  gather(key = "Variable", value = "Value") %>%
+  ggplot(aes(y = Value)) +
+  geom_boxplot(fill = "royalblue") +
+  facet_wrap(~ Variable, scales = "free") +
+  custom_theme
+
+# Calculate Z-scores
+numeric_cols %>%
+  mutate_all(~ (.-mean(.)) / sd(.)) %>%
+  filter_if(is.numeric, any_vars(abs(.) > 3))
+```
+\
+\
+Корреляционный анализ для предварительной оценки наличия ассоциации между физической активностью и уровнем гликолизированного гемоглобина не позволяет с уверенностью сказать, что есть какая-то ассоциация. 
+\
+\
+```{r}
+cor_matrix <- cor(numeric_cols , use = "complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", tl.col = "black", tl.cex = 0.8)
+
+```
+
+\
+\
+По результатам обзора литературы и общения с клиницистами мы визуализировали DAG модель, чтобы понять, какие факторы являются конфаундерами, медиаторами и коллайдерами в нашем исследовании.
+
+
+![DAG](dagitty-model.png)
+\
+\
+*Конфаундеры*: возраст, образование, доход, раса, пол, наличие заболеваний и курение.\
+*Медиатор*: BMI\
+*Коллайдеры*: наличие диабета, АД.\
+\
+\
+
+
+# Регрессионный анализ
+\
+\
+Начнем с простой линейной регрессии без дополнительных эффектов, чтобы оценить общий эффект физической активности на уровень гликолизированного гемоглобина.
+\
+\
+*GlyHemo ~ Total_MET*
+\
+\
+
+```{r}
+formula_1 = formula(GlyHemo ~ Total_MET)
+
+# model.matrix(formula_1, data_MET_final) %>% head()
+```
+
+
+```{r}
+first_fit <- lm(formula_1, data_MET_final)
+#print(first_fit)
+```
+
+```{r}
+summary(first_fit)
+```
+
+```{r}
+broom::tidy(first_fit, conf.int = TRUE)
+
+# модель без эффектов не дает значимых результатов
+```
+
+\
+\
+Простая линейная регрессия не дает значимых результатов, поэтому мы переходим к множественной линейной регрессии с учетом конфаундеров.
+\
+\
+*GlyHemo ~ Total_MET + Smoking + Education + Comorbidities + Income_Level + Race + Gender*
+\
+\
+
+```{r}
+formula_all = formula(GlyHemo ~ Total_MET + Smoking + 
+                        Education + Comorbidities + 
+          Income_Level + Education + Race + Gender)
+```
+
+```{r}
+all_fit <- lm(formula_all, data_MET_final)
+#print(all_fit)
+```
+
+```{r}
+summary(all_fit)
+```
+
+```{r}
+broom::tidy(all_fit, conf.int = TRUE)
+```
+\
+\
+Модель линейной регрессии выявила, что уровень гликированного гемоглобина (GlyHemo) значительно зависит от курения, уровня образования, наличия сопутствующих заболеваний, дохода и расовой принадлежности. Не курящие, лица с сопутствующими заболеваниями, а также представители афро-американской и азиатской рас имеют более высокий уровень гликированного гемоглобина, в то время как более высокий уровень образования связан с его снижением. Некоторые категории дохода также показали положительное влияние на гликированного гемоглобина. \
+Однако такие переменные, как физическая активность и пол не были значимыми. Модель объясняет 12.1% вариации уровня гликированного гемоглобина.
+\
+\
+```{r}
+broom::augment(all_fit) %>% head()
+```
+\
+\
+# Диагностика
+\
+\
+Диагностика модели показывает, что все предпосылки линейной регрессии соблюдены (если не считать странной сетчатой структуры в Scale-Location)
+\
+\
+\
+```{r}
+autoplot(all_fit)
+```
+
+\
+\
+
+# Точечная и интервальная оценка эффекта физической активности
+\
+\
+
+*Сокращенная модель*:
+\
+```{r}
+summary(first_fit, conf.int = TRUE)
+broom::tidy(first_fit, conf.int = TRUE)
+```
+\
+\
+В сокращенной модели мы видим минимальный, но статистически значимый эффект физической активности на уровень гликолизированного гемоглобина. Модель статистически значима, но объясняет очень малую долю вариации.
+\
+\
+*Полная модель:*
+\
+\
+
+```{r}
+summary(all_fit, conf.int = TRUE)
+broom::tidy(all_fit, conf.int = TRUE)
+```
+\
+\
+
+В полной модели при добавлении других предикторов эффект физической активности становится статистически незначимым.
+\
+Точечная оценка коэффициента в обоих случаях была отрицательной, но в полной модели интервальная оценка пересекла 0, поэтому в полной модели у нас нет стат. значимости при alpha = 0.05 для ассоциации между физической активностью и уровнем гликолизированного гемоглобина.
+\
+Таким образом, можно предположить, что влияние физической активности на уровень гликолизированного гемоглобина может быть скрыто другими факторами, такими как курение, образование, доход, раса и наличие заболеваний.
+\
+\
+
+# Пол как модификатор эффекта
+\
+\
+```{r}
+formula_gender = formula(GlyHemo ~ Total_MET_log*Gender)
+
+model.matrix(formula_gender, data_MET_final) %>% 
+  head()
+```
+\
+\
+```{r}
+gender_fit <- lm(formula_gender, data_MET_final)
+```
+
+```{r}
+summary(gender_fit, conf.int = TRUE)
+broom::tidy(gender_fit, conf.int = TRUE)
+```
+
+\
+\
+Основной эффект физической активности (Total_MET_log) остался статистически незначимым.
+Основной эффект пола (GenderFemale) статистически незначим.
+Взаимодействие между физической активностью и полом (Total_MET_log:GenderFemale) статистически незначимо.
+\
+Таким образом, пол не является модификатором эффекта физической активности на уровень гликированного гемоглобина, что означает, что влияние физической активности на гликозилированный гемоглобин одинаково для мужчин и женщин.
+\
+\
+
+# Выводы
+\
+\
+
+
+Исходное предположение о негативной связи между физической активностью и уровнем гликолизированного гемоглобина не подтвердилось. В простой модели мы получили статистически значимый, но минимальный эффект физической активности на уровень гликолизированного гемоглобина. Однако при добавлении конфаундеров, таких как курение, образование, доход, раса и наличие заболеваний, эффект физической активности стал статистически незначимым, в то время как влияние другим факторов оказалось более влиятельно.
+
+
+
+# Медиатор - BMI
+
+
+
+```{r}
+data_MET_final_bonus = data_MET %>% 
+    mutate(Comorbidities = if_else(
+        MCQ010 == 1 | MCQ035 == 1 | MCQ160C == 1 | MCQ160B == 1 |
+        MCQ160E == 1 | MCQ160F == 1 | MCQ160M == 1 | MCQ170M == 1 |
+        MCQ160O == 1 | MCQ220 == 1,
+        1, 0)) %>% mutate(
+    Gender = factor(RIAGENDR, levels = c(1, 2),
+                    labels = c("Male", "Female")),
+    Race = factor(RIDRETH3,  levels = c(1, 2, 3, 4, 6, 7),
+                       labels = c("Mexican",
+                                  "Hispanic",
+                                  "White",
+                                  "Black",
+                                  "Asian",
+                                  "Other")),
+    Education = factor(DMDEDUC2, levels = c(1, 2, 3, 4, 5),
+                       labels = c("<9th grade",
+                                  "9-11th grade",
+                                  "High School",
+                                  "Student",
+                                  "Graduate")),
+    Income_Level = factor(INDFMIN2,
+                         levels = 1:12,
+                         labels = c(
+                           "<4,999$",
+                           "5k-9,999$",
+                           "10k-14,999$",
+                           "15k-19,999$",
+                           "20k-24,999$",
+                           "25k-34,999$",
+                           "35k-44,999$",
+                           "45k-54,999$",
+                           "55k-64,999$",
+                           "65k-74,999$",
+                           "75k-99,999$",
+                           "100k+"
+                         )),
+    Comorbidities = factor(Comorbidities, levels = c(0, 1),
+                           labels = c("No", "Yes")),
+    Smoking = factor(SMQ040, levels = 1:3,
+                     labels = c("Every Day", "Sometimes", "Never")),
+    GlyHemo = as.numeric(LBXGH),
+    BMI = as.numeric(BMXBMI)) %>%
+  select(Gender, Race, Education, Income_Level, Comorbidities,
+         Smoking, GlyHemo, Total_MET, BMI) %>% 
+          filter(GlyHemo < quantile(GlyHemo, 0.75, na.rm = TRUE) + 1.5 * IQR(GlyHemo, na.rm = TRUE) &
+                 GlyHemo > quantile(GlyHemo, 0.25, na.rm = TRUE) - 1.5 * IQR(GlyHemo, na.rm = TRUE),
+                 Total_MET < quantile(Total_MET, 0.75, na.rm = TRUE) + 1.5 * IQR(Total_MET, na.rm = TRUE) &
+                 Total_MET > quantile(Total_MET, 0.25, na.rm = TRUE) - 1.5 * IQR(Total_MET, na.rm = TRUE)
+                  ) %>% 
+  mutate(Total_MET_log = log1p(Total_MET  + abs(min(Total_MET)))
+          ) %>%
+  filter(Total_MET_log > 2.5)
+```
+\
+Обучение модели:
+\
+```{r}
+formula_bonus = formula(GlyHemo ~ Total_MET_log + Smoking + 
+                        Education + Comorbidities + 
+          Income_Level + Education + Race + Gender + BMI)
+```
+
+```{r}
+bonus_fit <- lm(formula_bonus, data_MET_final_bonus)
+```
+
+```{r}
+broom::tidy(bonus_fit, conf.int = TRUE)
+```
+
+\
+\
+Общий эффект (total effect) включает как прямой путь (физическая активность → GlyHemo), так и косвенный путь через медиатор (физическая активность → BMI → GlyHemo).
+Прямой эффект (direct effect) исключает влияние медиатора, показывая непосредственное влияние физической активности на GlyHemo.
+\
+\
+Включение медиатора BMI еще больше снизило влияние физической активности на уровень гликолизированного гемоглобина, так как BMI
+забрал на себя часть связи между ними. 
+
+\
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
